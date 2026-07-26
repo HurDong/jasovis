@@ -1,0 +1,20 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 에디터
+.vscode/
+.idea/
+*.swp
+
+# 배포 산출물 (웹스토어 업로드용 zip)
+*.zip
+dist/
+build/
+
+# 혹시 도구를 붙이게 되면
+node_modules/
+*.log
+.env
+.env.*

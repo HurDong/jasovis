@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>자비스 — 답변 뱅크</title>
+<style>
+  /* 자비스 공용 테마 — 크림 외피 + 흰 본문, 주황 액센트, 숫자는 모노스페이스 */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 360px; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    font-size: 13px;
+    color: #332b24;
+    background: #fdf8f3;
+    max-height: 520px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .mono { font-family: ui-monospace, SFMono-Regular, Consolas, "Cascadia Mono", monospace; }
+  header {
+    padding: 12px 14px 10px;
+    flex-shrink: 0;
+  }
+  h1 {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1f1a15;
+    margin-bottom: 9px;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  h1 .brand { color: #ff6a00; }
+  h1 .count {
+    color: #93826f;
+    font-weight: 400;
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+  #search {
+    width: 100%;
+    padding: 8px 11px;
+    border: 1px solid #eadbc9;
+    border-radius: 10px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #332b24;
+    background: #fff;
+    outline: none;
+  }
+  #search:focus { border-color: #ff9b58; box-shadow: 0 0 0 3px #fff1e8; }
+  #chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 9px;
+  }
+  .chip {
+    border: 1px solid #eadbc9;
+    background: #fff;
+    color: #796b5f;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .chip:hover { border-color: #ffc399; color: #ff6a00; }
+  .chip.active {
+    background: #ff6a00;
+    border-color: #ff6a00;
+    color: #fff;
+    font-weight: 700;
+  }
+  #undo-bar {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 14px;
+    background: #fff1e8;
+    border-top: 1px solid #ffd9bd;
+    border-bottom: 1px solid #ffd9bd;
+    font-size: 12px;
+    color: #8a6a4d;
+    flex-shrink: 0;
+  }
+  #undo-bar.show { display: flex; }
+  #undo-btn {
+    border: none;
+    background: none;
+    color: #ff6a00;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+  }
+  #list {
+    overflow-y: auto;
+    flex: 1;
+    background: #fff;
+    border-radius: 14px 14px 0 0;
+    border-top: 1px solid #f0e2d5;
+  }
+  #list::-webkit-scrollbar { width: 4px; }
+  #list::-webkit-scrollbar-thumb { background: #eddfd2; border-radius: 2px; }
+  .empty {
+    padding: 42px 20px;
+    text-align: center;
+    color: #a89a8b;
+    line-height: 1.6;
+  }
+  .item {
+    padding: 11px 14px;
+    border-bottom: 1px solid #f8f1ea;
+  }
+  .item-top {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .item-title {
+    font-weight: 700;
+    font-size: 12px;
+    color: #ff6a00;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .del-btn {
+    border: none;
+    background: none;
+    color: #c9bdb2;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 2px 4px;
+  }
+  .del-btn:hover { color: #ef4444; }
+  .item-q {
+    margin-top: 4px;
+    font-weight: 700;
+    color: #1f1a15;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .item-a {
+    margin-top: 4px;
+    color: #6f6256;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    white-space: pre-line;
+  }
+  mark { background: #ffe4cf; color: inherit; border-radius: 2px; }
+  .item-bottom {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .tag {
+    background: #fff1e8;
+    color: #de5e00;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 10.5px;
+  }
+  .meta {
+    color: #b3a493;
+    font-size: 10.5px;
+    margin-left: auto;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+  .copy-btn {
+    border: 1.5px solid #ffb377;
+    background: #fff;
+    color: #ff6a00;
+    border-radius: 8px;
+    padding: 4px 12px;
+    font-size: 11.5px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .copy-btn:hover { background: #ff6a00; border-color: #ff6a00; color: #fff; }
+  .copy-btn.done {
+    background: #ff6a00;
+    border-color: #ff6a00;
+    color: #fff;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="brand">자비스</span> 답변 뱅크 <span class="count" id="count"></span></h1>
+  <input type="search" id="search" placeholder="질문·답변·회사명 검색">
+  <div id="chips"></div>
+</header>
+<div id="undo-bar">
+  <span>항목이 삭제되었습니다.</span>
+  <button id="undo-btn">실행취소</button>
+</div>
+<div id="list"></div>
+<script src="popup.js"></script>
+</body>
+</html>

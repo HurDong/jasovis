@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- 자비스(JASOVIS) 로고 — 자소설닷컴 비서 크롬 익스텐션 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF8A3D"/>
+      <stop offset="1" stop-color="#FF5A00"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#FFD9BC" stop-opacity=".55"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- 배경: 라운드 스퀘어 -->
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#bg)"/>
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="none" stroke="#FFFFFF" stroke-opacity=".14" stroke-width="2"/>
+
+  <!-- 문서 (자소서) -->
+  <g transform="translate(0,1)">
+    <path d="M44 30h28l14 14v52a6 6 0 0 1-6 6H44a6 6 0 0 1-6-6V36a6 6 0 0 1 6-6z"
+          fill="#FFFFFF" opacity=".97"/>
+    <path d="M72 30l14 14H76a4 4 0 0 1-4-4V30z" fill="#FFD9BC"/>
+    <!-- 텍스트 줄 -->
+    <rect x="46" y="52" width="30" height="4.5" rx="2.25" fill="#FF6A00" opacity=".85"/>
+    <rect x="46" y="62" width="36" height="4.5" rx="2.25" fill="#FFB27A"/>
+    <rect x="46" y="72" width="24" height="4.5" rx="2.25" fill="#FFB27A"/>
+  </g>
+
+  <!-- AI 어시스턴트 펄스 링 (자비스 오브) -->
+  <g filter="url(#glow)">
+    <circle cx="86" cy="86" r="17" fill="#FF5A00"/>
+    <circle cx="86" cy="86" r="17" fill="none" stroke="url(#ring)" stroke-width="3.5"/>
+    <!-- 링 궤도 스파크 -->
+    <circle cx="86" cy="69" r="3" fill="#FFFFFF"/>
+    <!-- 중심 코어 -->
+    <circle cx="86" cy="86" r="6.5" fill="#FFFFFF"/>
+    <circle cx="86" cy="86" r="3" fill="#FFE3D1"/>
+  </g>
+</svg>

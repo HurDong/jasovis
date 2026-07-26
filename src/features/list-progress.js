@@ -1,0 +1,218 @@
+// 목록 페이지: '작성 중' 카드 좌측에 문항 진행 타일 + 카드 밑변 세그먼트 (SPEC.md 참조)
+// 대상: category === 0 (작성 중)만. 미제출(10)은 제외.
+// 디자인 I-1a: 카드 높이에 비례해 차오르던 옛 물채움(면적 인코딩)은 카드마다 높이가 달라
+//   나란히 놓았을 때 비교가 성립하지 않았다 → 모든 카드에서 같은 자리·같은 크기인
+//   46px 고정 타일(큰 숫자)과 밑변 세그먼트로 교체. 색+칸수+숫자 3중 인코딩(color-not-only).
+// 색은 사이트 테마인 주황 + 무채색만 쓴다. 목록의 이 카드들은 전부 '작성 중'(제출 전)이라
+//   문항을 다 채워도 '완료'가 아니다 — 완료 초록을 쓰면 안 된다.
+// 주의: 사이트가 카드 리스트를 수시로 재렌더해 주입 노드가 날아간다(실페이지 검증됨)
+//       → onState(2초 주기) + MutationObserver로 재적용한다.
+JSL.register('list-progress', function () {
+  'use strict';
+
+  var TILE_W = 46;   // 타일 폭(px). 이 값만큼 카드 본문을 오른쪽으로 밀어낸다.
+  var MAX_SEG = 20;  // 세그먼트가 실오라기가 되지 않는 상한. 넘으면 비율로 근사한다.
+
+  var progressById = {}; // { resumeId: {filled, total} }
+
+  // 카드 오버레이 공용 스타일 1회 주입
+  function ensureStyle() {
+    if (document.getElementById('jsl-progress-style')) return;
+    var st = document.createElement('style');
+    st.id = 'jsl-progress-style';
+    st.textContent = [
+      'li.resume-node .jsl-tile{position:absolute;left:0;top:0;bottom:0;width:' + TILE_W + 'px;z-index:1;',
+      '  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;',
+      '  font-variant-numeric:tabular-nums;pointer-events:none;}',
+      'li.resume-node .jsl-num{font-size:21px;line-height:1;font-weight:700;}',
+      'li.resume-node .jsl-den{font-size:11.5px;line-height:1;font-weight:500;}',
+      'li.resume-node .jsl-seg{position:absolute;left:' + TILE_W + 'px;right:0;bottom:0;z-index:1;',
+      '  display:flex;gap:2px;pointer-events:none;}',
+      'li.resume-node .jsl-seg > span{flex:1;height:4px;background:#e8e5dd;}',
+      'li.resume-node .jsl-seg > span.on{background:#f26200;}',
+      // 미작성 — 무채색
+      'li.resume-node .jsl-t0{background:#f2f0e9;border-right:1px solid #dedbd1;}',
+      'li.resume-node .jsl-t0 .jsl-num{color:#6b6a63;} li.resume-node .jsl-t0 .jsl-den{color:#a5a29a;}',
+      // 작성 중 — 연주황
+      'li.resume-node .jsl-t1{background:#fff1e6;border-right:1px solid #ffdcc4;}',
+      'li.resume-node .jsl-t1 .jsl-num{color:#c74f00;} li.resume-node .jsl-t1 .jsl-den{color:#d8946a;}',
+      // 전 문항 채움 — 주황 반전
+      'li.resume-node .jsl-t2{background:#f26200;border-right:1px solid #d95500;}',
+      'li.resume-node .jsl-t2 .jsl-num{color:#fff;} li.resume-node .jsl-t2 .jsl-den{color:#ffcfa8;}'
+    ].join('\n');
+    (document.head || document.documentElement).appendChild(st);
+  }
+
+  // 카드 1장당 getComputedStyle은 최초 페인트 때 딱 1번만 부른다.
+  // (읽기/쓰기를 섞으면 카드 수만큼 강제 리플로우가 난다 — 145장 페이지에서 확인)
+  function reserveSpace(li) {
+    if (li.hasAttribute('data-jsl-inset')) return;
+    var cs = getComputedStyle(li);
+    if (cs.position === 'static') li.style.position = 'relative';
+    li.style.overflow = 'hidden';
+    li.setAttribute('data-jsl-inset', '1');
+    li.style.paddingLeft = ((parseFloat(cs.paddingLeft) || 0) + TILE_W) + 'px';
+    li.style.paddingBottom = ((parseFloat(cs.paddingBottom) || 0) + 5) + 'px';
+  }
+
+  function releaseSpace(li) {
+    if (!li.hasAttribute('data-jsl-inset')) return;
+    li.removeAttribute('data-jsl-inset');
+    li.style.paddingLeft = '';
+    li.style.paddingBottom = '';
+  }
+
+  function paint(li, p) {
+    var total = p.total;
+    var filled = Math.min(p.filled, total);
+    var key = filled + '/' + total;
+
+    var tile = li.querySelector('.jsl-tile');
+    // 이미 그려져 있고 값도 같으면 스킵
+    if (tile && tile.getAttribute('data-key') === key) return;
+
+    reserveSpace(li);
+
+    if (!tile) {
+      tile = document.createElement('div');
+      tile.innerHTML = '<span class="jsl-num"></span><span class="jsl-den"></span>';
+      li.appendChild(tile);
+    }
+    // 0 = 미작성 / 1 = 작성 중 / 2 = 전 문항 채움
+    var s = filled === 0 ? 0 : (filled >= total ? 2 : 1);
+    tile.className = 'jsl-tile jsl-t' + s;
+    tile.setAttribute('data-key', key);
+    tile.title = '문항 ' + filled + '/' + total + ' 작성';
+    tile.querySelector('.jsl-num').textContent = String(filled);
+    tile.querySelector('.jsl-den').textContent = '/ ' + total;
+
+    var seg = li.querySelector('.jsl-seg');
+    if (!seg) {
+      seg = document.createElement('div');
+      seg.className = 'jsl-seg';
+      li.appendChild(seg);
+    }
+    var cells = Math.min(total, MAX_SEG);
+    if (seg.childElementCount !== cells) {
+      var html = '';
+      for (var i = 0; i < cells; i++) html += '<span></span>';
+      seg.innerHTML = html;
+    }
+    // 문항이 MAX_SEG를 넘으면 칸=문항 대응이 깨지므로 비율로 근사한다(숫자는 실제값 유지).
+    var on = total <= MAX_SEG ? filled : Math.round((filled / total) * cells);
+    for (var j = 0; j < cells; j++) seg.children[j].className = j < on ? 'on' : '';
+
+    // 카드 본문이 주입 레이어 위로 오게 (이미 올려둔 노드는 다시 쓰지 않는다)
+    for (var k = 0; k < li.children.length; k++) {
+      var ch = li.children[k];
+      if ((ch.className + '').indexOf('jsl-') === -1 && ch.style.zIndex !== '1') {
+        ch.style.position = 'relative';
+        ch.style.zIndex = '1';
+      }
+    }
+  }
+
+  function unpaint(li) {
+    var tile = li.querySelector('.jsl-tile');
+    var seg = li.querySelector('.jsl-seg');
+    if (tile) tile.remove();
+    if (seg) seg.remove();
+    releaseSpace(li);
+  }
+
+  var mo = null;
+
+  function applyAll() {
+    try {
+      ensureStyle();
+      var nodes = document.querySelectorAll('li.resume-node[resume_node_id]');
+      for (var i = 0; i < nodes.length; i++) {
+        var li = nodes[i];
+        var id = Number(li.getAttribute('resume_node_id'));
+        var p = progressById[id];
+        // 문항이 0개면 보여줄 진행이 없다 — 빈 타일은 노이즈다
+        if (p && p.total > 0) paint(li, p);
+        else if (li.querySelector('.jsl-tile')) unpaint(li); // 작성 중에서 벗어난 카드 정리
+      }
+    } catch (e) {
+      console.warn('[자비스] 진행률 오버레이 적용 오류', e);
+    } finally {
+      // 방금 우리가 만든 변경 기록은 버린다 — 안 버리면 자기 자신을 다시 트리거한다
+      if (mo) mo.takeRecords();
+    }
+  }
+
+  function ingest(state) {
+    if (!state || state.page !== 'list' || !Array.isArray(state.resumes)) return false;
+    progressById = {};
+    state.resumes.forEach(function (r) {
+      if (r.category === 0) { // 작성 중만 (미제출 10 제외 — 사용자 결정)
+        progressById[r.id] = { filled: r.qnaFilled, total: r.qnaTotal };
+      }
+    });
+    return true;
+  }
+
+  // 2초 주기 브로드캐스트를 기다리면 드래그·새로고침 반응이 최대 2초 늦다(실페이지 측정).
+  // 변화가 감지된 시점에 직접 당겨온다. 브로드캐스트는 안전망으로만 남긴다.
+  var pullTimer = null;
+  var pulling = false;
+  var lastPull = 0;
+  var MIN_GAP = 250; // 연속 변경 중 요청이 몰리지 않게 하는 하한
+
+  function pull() {
+    if (pulling) return; // 진행 중인 요청에 합류
+    pulling = true;
+    lastPull = Date.now();
+    JSL.getState().then(function (state) {
+      pulling = false;
+      if (ingest(state)) applyAll();
+    }, function () {
+      pulling = false;
+    });
+  }
+
+  function schedulePull(delay) {
+    var wait = Math.max(delay, MIN_GAP - (Date.now() - lastPull));
+    if (pullTimer) clearTimeout(pullTimer);
+    pullTimer = setTimeout(function () {
+      pullTimer = null;
+      pull();
+    }, wait);
+  }
+
+  JSL.onState(function (state) {
+    try {
+      if (ingest(state)) applyAll();
+    } catch (e) { /* 예외 전파 금지 */ }
+  });
+
+  // 재렌더·드래그 대응: 카드 영역이 바뀌면 상태를 즉시 다시 읽고 그린다
+  mo = new MutationObserver(function () {
+    schedulePull(60);
+  });
+  try {
+    mo.observe(document.body, { childList: true, subtree: true });
+  } catch (e) { /* body 없음 등 — onState 주기 적용만으로 동작 */ }
+
+  // 백그라운드 탭에서는 브라우저가 타이머를 조인다 → 돌아온 순간 상태가 낡아 있다
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') schedulePull(0);
+  });
+
+  // 초기 진입: 첫 브로드캐스트를 기다리지 않는다.
+  // 목록 스코프가 아직 없을 수 있어 잠깐 재시도한다(그려지면 멈춤).
+  var tries = 0;
+  (function bootstrap() {
+    if (++tries > 12) return; // 약 6초
+    JSL.getState().then(function (state) {
+      if (ingest(state) && Object.keys(progressById).length) {
+        applyAll();
+        return;
+      }
+      setTimeout(bootstrap, 500);
+    }, function () {
+      setTimeout(bootstrap, 500);
+    });
+  })();
+});
