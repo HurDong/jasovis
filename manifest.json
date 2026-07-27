@@ -31,6 +31,7 @@
         "src/core/bridge.js",
         "src/features/dashboard.js",
         "src/features/jd-panel.js",
+        "src/features/chat-jd.js",
         "src/features/copy.js",
         "src/features/spellcheck.js",
         "src/features/hotkeys.js",

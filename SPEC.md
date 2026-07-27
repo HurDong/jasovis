@@ -137,6 +137,7 @@ dashboard가 없거나 5초 내 ready 안 되면, 다른 기능은 UI 추가를 
 | `src/features/hotkeys.js` | Agent D |
 | `src/features/bank.js`, `src/popup/popup.html`, `src/popup/popup.js` | Agent E |
 | `src/features/jd-panel.js` | (완료) |
+| `src/features/chat-jd.js` | (완료) |
 | `src/features/checkpoint.js` | (완료) |
 | `src/features/qna-nav.js` | **제거됨** — manifest에서 내렸다. 파일만 남아 있고 로드되지 않는다.
   문항 이동은 대시보드 카드 클릭과 `Alt+숫자` 단축키로 대체. |
@@ -291,6 +292,67 @@ keydown은 capture 단계(`addEventListener(..., true)`)로 document에 등록
   이미지 파일 자체가 아니라 `employment_page_url`(회사 자체 채용 사이트, "채용 사이트" 버튼과
   동일 링크)로 새 탭 이동한다 — 이미지 URL로 바로 이동하면 브라우저가 다운로드로 처리해버림.
 - fetch는 `employment_company_id`가 바뀔 때만 한다 (state는 타이핑마다 오므로 매번 재조회하면 안 됨).
+
+## 채팅방 → 그 회사 공고 모달 (`src/features/chat-jd.js`) — 2026-07-27 실계정 검증
+
+오른쪽 채팅 패널에서 **다른 회사(B사) 채팅방**을 열면 헤더 아래에 주황 버튼 줄이 생기고,
+누르면 그 회사의 공고 목록이 화면 가운데 모달로 뜬다. 자소서 쓰던 페이지를 안 벗어나는 게 목적.
+
+- **채팅 UI가 두 개다.** 이걸 놓쳐서 "어떤 방에서는 버튼이 아예 안 뜬다"는 버그가 났었다.
+  둘 다 `div.chat-ctrl` 안에 들어 있고, 상황에 따라 한쪽만 보인다.
+  | | A. React 채팅 | B. 페이지 내 Angular 채팅 |
+  |---|---|---|
+  | 뿌리 | `iframe[src*="chat-slide"]`의 `contentDocument` | `.chat-container.chat-window` 엘리먼트 |
+  | 언제 | 상단바 채팅 버튼으로 열 때 | **자소서 페이지에서 사이트가 스스로 "이 기업 방"을 띄울 때** |
+  | 헤더 블록 | `.sticky` | `.chat-window-head` |
+  | 헤더 줄 | `h-[52px]` div | `.chat-info-wrapper` (52px) |
+  | 뒤로/닫기 | `aria-label`에 back | `.close-chat` |
+  **회사명 앵커 `a[href^="/companies/:id"]`는 양쪽에 똑같이 있다** — 그래서 뿌리만 일반화하면
+  나머지 로직은 공유된다. iframe은 같은 출처라 `contentDocument`로 그냥 읽힌다
+  (`all_frames`도, 추가 권한도 불필요).
+- **"보이는 창" 판정을 크기로만 하면 안 된다.** 사이트가 채팅을 감추는 방식이 둘 다 다르다:
+  - A는 iframe을 `display:none` + 0x0으로 만든다.
+  - B는 **크기를 그대로 둔 채 패널을 화면 오른쪽 밖으로 밀어낸다**
+    (실측: 열림 `left=2200` / 닫힘 `left=2560`, `innerWidth=2560`. `.chat-ctrl`의 `open-chat` 클래스가 토글된다).
+  그래서 크기 + **뷰포트 교차**를 같이 본다. `offsetParent`는 `position:fixed`에서 null이라 못 쓴다.
+- **숨은 창도 마지막으로 보던 방의 회사 앵커를 그대로 들고 있다.** 그래서 `querySelector`로
+  창 하나만 집으면 "숨은 창에 버튼을 꽂아놓고 정작 보이는 창엔 아무것도 안 뜨는" 상태가 된다
+  (실제로 보고된 증상). 보이는 창을 **전부** 찾아 각각 버튼 줄을 관리해야 한다.
+- **열린 채팅방의 회사 식별**: 방 헤더의 회사명이 앵커다. `a[href^="/companies/:id"]`의
+  `:id`가 곧 `company_group_id`. 실측: `/companies/269` = 현대오토에버, `/companies/4155` = 유진투자선물.
+  방 목록 화면이나 회사 방이 아닌 채팅(전체·직무별·인사담당자)에는 이 앵커가 **없다** →
+  버튼 줄을 자동으로 숨기는 판정에 그대로 쓴다.
+  (백업 경로: `GET /api/v1/chats`의 항목 중 `type_number === 2`인 것이 회사 방이고 그 `type_id`가
+  company_group_id다. 포스코 `type_id:14` ↔ `company_groups/14` 일치 확인. 지금은 앵커만 쓴다.)
+- **회사 → 공고 전체**: `GET /api/v1/company_groups/:id/employment_companies`
+  마감된 공고까지 전부 온다(현대오토에버 20건, 진행 중 0건). 각 항목에 `employments[]`가
+  들어 있어 모집부문 조회를 위한 추가 요청이 필요 없다.
+- **"내가 쓴 공고" 매칭**: `GET /api/v1/resumes`(내 자소서 전체, 270건).
+  **연결 키는 `employment_company_id`가 아니라 `resume.employment_id`다** — 자소서는 공고가 아니라
+  그 안의 모집부문에 매여 있다. `employments[].id` → 공고 id 역인덱스를 만들어 맞춘다.
+  `/api/v1/resumes` 응답에는 `employment_company_id`가 아예 없으니 이 경로 말고는 방법이 없다.
+  실측: 현대오토에버 5건, 앰코테크놀로지코리아 2건 정확히 매칭됨.
+- **공고 본문**: `GET /api/v1/employment_companies/:id?skip_read_log=true` — JD 패널이 쓰는 그 API.
+  텍스트형/포스터 이미지형 판별 규칙도 jd-panel과 동일(태그 걷어낸 순수 텍스트 15자 미만이면 이미지형).
+- 통계 칩은 SPEC의 카테고리 코드를 그대로 쓴다. "서류 통과"는 `category === 2`뿐 아니라
+  그 뒤 단계로 넘어간 카드(6,7,8,9,4,5)를 모두 포함한다 — 위 통계 산정식과 같은 정의.
+
+### 구현상 주의
+
+- **React가 우리 노드를 수시로 날린다.** 창마다 MutationObserver(120ms 디바운스)를 따로 걸어
+  다시 꽂고, `mo.takeRecords()`로 자기 유발 변경을 버린다(list-progress와 같은 패턴).
+  창의 등장·교체·가시성 변화는 옵저버로 안 잡히므로 500ms 폴링 + `resize`로 잡는다.
+  헤더 줄 엘리먼트는 리렌더마다 새 노드로 갈리므로 **삽입 기준점은 매번 새로 찾는다**
+  (캐시해 두면 엉뚱한 자리에 꽂힌다).
+- **버튼 줄은 헤더 안이 아니라 헤더 줄 바로 아래**에 넣는다. 헤더는
+  `flex ... justify-between` 한 줄에 회사명(≈239px)+아이콘 2개가 이미 335px를 다 쓰고 있어서
+  안에 끼우면 라벨이 잘린다. 삽입 기준점은 `a.closest('.sticky')`의 직계 자식 중 앵커를 품은 줄.
+- **모달은 iframe이 아니라 최상위 문서에** 그린다. iframe 안에 그리면 채팅 패널 폭(≈358px)에
+  갇혀 포스터를 크게 볼 수 없다. `z-index: 2147483647`.
+- **Esc는 두 문서 모두에 걸어야 한다.** 포커스가 채팅 iframe 안에 있으면 keydown이
+  최상위 문서로 오지 않는다.
+- 모달 패널은 `height` 고정이 아니라 `max-height`. 고정하면 공고가 3개뿐인 회사에서 아래가 텅 빈다.
+- 조회는 전부 캐시한다: 내 자소서 1회, 회사별 공고 목록 1회, 공고 상세 1회.
 
 ## 공통 원칙
 
