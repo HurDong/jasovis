@@ -1,8 +1,9 @@
 // 검수 위치 마커 기능 — 답변 textarea 안에서 캐럿이 있는 문장에 지속적으로
 // 테두리+배경 하이라이트를 씌운다. 다른 탭 갔다 오거나 문항을 전환해도
 // 마지막 캐럿 위치를 문항별로 기억해서 같은 자리에 표시를 복원한다.
-// 답변란에서 Tab / Shift+Tab(별칭 Alt+↓ / Alt+↑)으로 하이라이트를 다음·이전
+// 답변란에서 Tab / Shift+Tab으로 하이라이트를 다음·이전
 // 문장으로 넘길 수 있다 — 마우스 없이 한 문장씩 읽어 내려가는 검수용.
+// (Alt+↓ / Alt+↑는 예전엔 이 기능의 별칭이었지만, 문항 전환 단축키로 재배정됐다 — hotkeys.js 참조)
 //
 // 구현 방식: textarea는 원래 위치(position 값)를 유지한 채 배경/글자색을
 // 완전히 투명하게 만든다 (caret-color만 원래 색으로 남겨 캐럿은 보이게).
@@ -29,6 +30,7 @@ JSL.register('checkpoint', function () {
 
   var offsets = {};        // storage 캐시 { qnaId: offset }
   var activeQnaId = null;  // 현재 활성 문항 id (state.qnas[].id)
+  var activeNumber = null; // 현재 활성 문항 번호 (focus:answer 대기 판정용)
   var currentTa = null;    // 현재 오버레이가 붙은 textarea
   var host = null;         // 백드롭 호스트 (position:fixed)
   var shadow = null;
@@ -466,20 +468,20 @@ JSL.register('checkpoint', function () {
     } catch (e) { /* 무시 */ }
   }
 
-  // Tab / Shift+Tab — 다음/이전 문장. Alt+↓ / Alt+↑도 같은 동작(별칭).
+  // Tab / Shift+Tab — 다음/이전 문장.
   // 답변 textarea에 직접 붙는 리스너라 다른 입력칸의 Tab 포커스 이동은 그대로다.
   // 답변란에서 Tab의 기본 동작은 '다음 컨트롤로 포커스 이동'인데 작성 중엔 거의
   // 쓰지 않으므로 검수 이동에 내준다 — 밖으로 나가려면 Esc로 답변란을 벗어난 뒤
   // Tab을 쓰면 된다(아래 Esc 처리).
+  // Alt+↓/Alt+↑는 예전엔 여기 별칭이었지만 hotkeys.js의 문항 전환으로 넘어갔다
+  // (hotkeys가 document capture에서 먼저 가로채 여기까진 오지 않는다).
   function onKeyDown(e) {
     if (e.isComposing || composing) return; // 한글 조합 중 Tab은 조합 확정용일 수 있다
     var isTab = e.key === 'Tab' && !e.ctrlKey && !e.altKey && !e.metaKey;
-    var isAltArrow = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
-      (e.key === 'ArrowDown' || e.key === 'ArrowUp');
-    if (isTab || isAltArrow) {
+    if (isTab) {
       e.preventDefault();
       e.stopPropagation();
-      moveSentence(isTab ? (e.shiftKey ? -1 : 1) : (e.key === 'ArrowDown' ? 1 : -1));
+      moveSentence(e.shiftKey ? -1 : 1);
       return;
     }
     // Esc — 답변란에서 빠져나온다. Tab을 가로챈 대신 남겨두는 탈출구.
@@ -637,6 +639,56 @@ JSL.register('checkpoint', function () {
     } catch (e) { /* 무시 */ }
   }
 
+  // ---- 문항 전환 후 커서를 본문으로 ('focus:answer' 구독) ----
+  // 단축키·내비 버튼으로 문항만 바뀌고 커서는 밖에 남아 있으면, 결국 답변란을
+  // 한 번 클릭해야 해서 키보드로 옮긴 의미가 없다(실제로 보고됨).
+  // 캐럿은 그 문항에 저장해둔 검수 위치로 되돌린다 — 없으면 글 맨 끝(이어 쓰기 좋은 자리).
+  //
+  // 전환은 비동기다: 요청 직후엔 아직 이전 문항의 textarea가 보일 수 있고
+  // activeQnaId도 다음 state 브로드캐스트가 와야 갱신된다. 그래서 즉시 포커스하지 않고
+  // 목표 문항이 실제로 활성화될 때까지 짧게 폴링한다(끝내 안 되면 조용히 포기).
+  var FOCUS_POLL_MS = 30;
+  var FOCUS_TIMEOUT_MS = 1500;
+  var focusTimer = null;
+
+  function focusAnswerNow(wantNumber) {
+    if (wantNumber != null && activeNumber !== wantNumber) return false;
+    var ta = findVisibleAnswerTa();
+    // 전환 중엔 아무 것도 안 보일 수 있다. 이때 findVisibleAnswerTa가 폴백으로 주는
+    // '숨은 첫 번째'에 포커스하면 엉뚱한 문항으로 커서가 간다 — 보이는 것만 받는다.
+    if (!ta || ta.offsetParent === null) return false;
+    ensureAttached(); // 새 문항 textarea에 오버레이 재부착
+    if (currentTa !== ta) return false;
+    try {
+      var text = ta.value || '';
+      var saved = (activeQnaId != null && typeof offsets[activeQnaId] === 'number')
+        ? offsets[activeQnaId] : text.length;
+      var pos = Math.max(0, Math.min(saved, text.length));
+      // 선택 범위를 포커스보다 먼저 잡는다 — 순서를 바꾸면 focus 핸들러(onInteract)가
+      // 아직 0인 캐럿 위치를 읽어 저장해둔 검수 위치를 0으로 덮어쓴다.
+      ta.setSelectionRange(pos, pos);
+      ta.focus();
+    } catch (e) {
+      return false;
+    }
+    onInteract();        // 하이라이트 갱신 (+ 같은 위치로 저장)
+    scrollMarkIntoView();
+    return true;
+  }
+
+  JSL.on('focus:answer', function (payload) {
+    var wantNumber = payload && payload.number != null ? Number(payload.number) : null;
+    var deadline = Date.now() + FOCUS_TIMEOUT_MS;
+    if (focusTimer) { clearTimeout(focusTimer); focusTimer = null; } // 연타 시 이전 대기는 버린다
+    (function tick() {
+      focusTimer = null;
+      try {
+        if (focusAnswerNow(wantNumber)) return;
+      } catch (e) { /* 무시 */ }
+      if (Date.now() < deadline) focusTimer = setTimeout(tick, FOCUS_POLL_MS);
+    })();
+  });
+
   loadOffsets();
 
   JSL.onState(function (state) {
@@ -647,6 +699,7 @@ JSL.register('checkpoint', function () {
         if (state.qnas[i] && state.qnas[i].active) { active = state.qnas[i]; break; }
       }
       activeQnaId = active && active.id != null ? active.id : null;
+      activeNumber = active && active.number != null ? Number(active.number) : null;
       ensureAttached();
     } catch (e) { /* 무시 */ }
   });

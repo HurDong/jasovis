@@ -144,11 +144,14 @@ JSL.register('qna-nav', function () {
   function sendSwitch() {
     if (desiredIndex == null || !qnas || !qnas[desiredIndex]) { busy = false; return; }
     var target = desiredIndex;
+    var number = Number(qnas[target].number);
     busy = true;
-    JSL.action('switchQna', { number: Number(qnas[target].number) }).then(function () {
+    JSL.action('switchQna', { number: number }).then(function () {
       busy = false;
       if (desiredIndex === target) {
         desiredIndex = null; // 목적지 도착 — 낙관 상태 해제, 이후엔 실제 state 기준으로 표시
+        // 최종 목적지에 도착했을 때만 커서를 본문으로 (중간 경유 문항은 건너뛴다)
+        JSL.emit('focus:answer', { number: number });
       } else {
         sendSwitch(); // 응답 오는 사이 더 눌렀으면, 그 사이 단계는 건너뛰고 최종 목적지로 바로 이동
       }

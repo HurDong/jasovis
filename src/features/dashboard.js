@@ -366,7 +366,10 @@
       content.setAttribute('tabindex', '0');
       content.setAttribute('aria-label', '문항 ' + num + '(으)로 이동');
       if (qna.active) content.setAttribute('aria-current', 'true');
-      var goToQna = function () { JSL.action('switchQna', { number: num }); };
+      var goToQna = function () {
+        JSL.action('switchQna', { number: num });
+        JSL.emit('focus:answer', { number: num }); // 전환 후 커서도 본문으로 (checkpoint가 구독)
+      };
       content.addEventListener('click', goToQna);
       content.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;

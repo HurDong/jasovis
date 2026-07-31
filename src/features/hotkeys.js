@@ -1,5 +1,6 @@
 // 단축키 기능 (Agent D) — SPEC.md '확정 키맵' 참조
-// Alt+1~9: 문항 전환 / Alt+C: 활성 문항 복사 / Alt+Shift+C: 전체 복사
+// Alt+1~9: 문항 전환 (번호 지정) / Alt+↓·Alt+↑: 다음·이전 문항 전환
+// Alt+C: 활성 문항 복사 / Alt+Shift+C: 전체 복사
 // F7: 맞춤법검사 / Ctrl+S: 저장 / Alt+/: 단축키 도움말
 JSL.register('hotkeys', function () {
   'use strict';
@@ -10,7 +11,8 @@ JSL.register('hotkeys', function () {
   // {group}은 구분 헤더 한 줄. 9항목을 한 덩이로 늘어놓으면 눈이 미끄러져서 3덩이로 나눴다.
   var HELP_ITEMS = [
     { group: '문항 이동' },
-    { keys: 'Alt+1 / Alt+9', desc: '문항 전환' },
+    { keys: 'Alt+1 / Alt+9', desc: '문항 전환 (커서도 답변란으로)' },
+    { keys: 'Alt+↓ / Alt+↑', desc: '다음 / 이전 문항으로 전환 (별칭 아님, 문항 이동)' },
     { group: '복사 · 검사' },
     { keys: 'Alt+C', desc: '활성 문항 복사' },
     { keys: 'Alt+Shift+C', desc: '전체 복사' },
@@ -19,7 +21,6 @@ JSL.register('hotkeys', function () {
     // 아래 묶음은 checkpoint 기능이 답변 textarea에 직접 붙여 처리한다 (여기선 안내만)
     { group: '검수 (답변란)' },
     { keys: 'Tab / Shift+Tab', desc: '다음 / 이전 문장' },
-    { keys: 'Alt+↓ / Alt+↑', desc: '위와 동일 (별칭)' },
     { keys: 'Esc', desc: '답변란 벗어나기' },
     { keys: 'Alt+/', desc: '이 안내 열기·닫기' }
   ];
@@ -28,17 +29,38 @@ JSL.register('hotkeys', function () {
     JSL.emit('toast', { kind: 'help', title: '단축키', items: HELP_ITEMS });
   }
 
-  // 활성 문항 번호 추적 (state는 null일 수 있음 — 조용히 견딘다)
+  // 활성 문항 번호 + 문항 목록 추적 (state는 null일 수 있음 — 조용히 견딘다)
+  // 목록도 같이 들고 있는 건 Alt+↓/Alt+↑가 "다음/이전"을 번호+1이 아니라 실제
+  // 배열 순서로 판단해야 하기 때문 (qna-nav의 effectiveIndex와 같은 이유).
   var activeNumber = null;
+  var qnaList = null; // number 오름차순 배열 (state.qnas)
   JSL.onState(function (state) {
     try {
       if (state && state.qnas && state.qnas.length) {
+        qnaList = state.qnas;
         for (var i = 0; i < state.qnas.length; i++) {
           if (state.qnas[i].active) { activeNumber = state.qnas[i].number; return; }
         }
+      } else {
+        qnaList = null;
       }
     } catch (e) { /* 무시 */ }
   });
+
+  // dir > 0 다음 문항 / dir < 0 이전 문항. 처음·끝에서는 아무것도 하지 않는다.
+  function switchByDir(dir) {
+    if (!qnaList || !qnaList.length) return;
+    var idx = -1;
+    for (var i = 0; i < qnaList.length; i++) {
+      if (qnaList[i].active) { idx = i; break; }
+    }
+    if (idx < 0) return;
+    var target = idx + dir;
+    if (target < 0 || target >= qnaList.length) return;
+    var number = qnaList[target].number;
+    runAction('switchQna', { number: number });
+    JSL.emit('focus:answer', { number: number });
+  }
 
   function toast(message, kind) {
     JSL.emit('toast', { message: message, kind: kind });
@@ -74,6 +96,17 @@ JSL.register('hotkeys', function () {
     if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && /^Digit[1-9]$/.test(e.code)) {
       var number = parseInt(e.code.slice(5), 10);
       runAction('switchQna', { number: number });
+      // 문항만 바뀌고 커서가 밖에 남으면 결국 답변란을 마우스로 눌러야 한다 —
+      // 전환이 끝나는 대로 커서도 본문으로 옮긴다 (checkpoint가 구독)
+      JSL.emit('focus:answer', { number: number });
+      return true;
+    }
+
+    // Alt+↓ / Alt+↑ — 다음 / 이전 문항 전환. 예전엔 checkpoint의 문장 이동
+    // 별칭이었지만 실사용 빈도가 낮아 여기(문항 전환)로 재배정했다.
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey &&
+      (e.code === 'ArrowDown' || e.code === 'ArrowUp')) {
+      switchByDir(e.code === 'ArrowDown' ? 1 : -1);
       return true;
     }
 

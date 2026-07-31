@@ -78,6 +78,11 @@ State가 `null`이면 스코프를 못 찾은 것(페이지 로딩 중이거나 
 
 - `'copy:qna'` payload `{number}` — 해당 문항 평문 복사 실행 (copy 기능이 구독)
 - `'copy:full'` — 전체 프롬프트 모드 복사 실행 (copy 기능이 구독)
+- `'focus:answer'` payload `{number}` — 해당 문항 답변란에 포커스 (checkpoint가 구독).
+  **문항을 전환하는 쪽은 항상 이 이벤트도 같이 쏜다** (hotkeys의 Alt+숫자, qna-nav 버튼,
+  dashboard 카드 클릭) — 문항만 바뀌고 커서가 밖에 남으면 결국 답변란을 마우스로 눌러야 해서
+  키보드로 옮긴 의미가 없다. 캐럿은 그 문항에 저장된 검수 위치로, 없으면 글 맨 끝으로 간다.
+  전환이 비동기라 checkpoint 쪽에서 `number`가 활성화될 때까지 30ms 간격으로 최대 1.5초 기다린다.
 - `'toast'` payload `{message, sub, kind, items, title, duration}` — 알림 표시 (dashboard가 구독/렌더)
   - **위치: 화면 우하단 고정**(`right:20px / bottom:20px`, 위로 쌓임). 위젯 shadow가 아니라
     body에 붙는 별도 호스트(`#jsl-toasts`)에 그린다 — 위젯 호스트에 `transform`이 걸려 있어서
@@ -149,13 +154,13 @@ manifest.json에 위 파일이 모두 이미 등록돼 있다. 파일이 비어 
 
 | 키 | 동작 | 비고 |
 |---|---|---|
-| `Alt+1`..`Alt+9` | 문항 전환 | Ctrl+숫자는 크롬 탭 전환이라 가로채기 불가 |
+| `Alt+1`..`Alt+9` | 문항 전환(번호 지정) + 답변란에 포커스 | Ctrl+숫자는 크롬 탭 전환이라 가로채기 불가 |
+| `Alt+↓` / `Alt+↑` | 다음/이전 문항으로 전환 + 답변란에 포커스 | 배열 순서 기준(qnas index), 처음·끝에서는 무시. 예전엔 checkpoint의 문장 이동 별칭이었으나 재배정됨 |
 | `Alt+C` | 현재 활성 문항 평문 복사 | `JSL.emit('copy:qna', {number: 활성번호})` |
 | `Alt+Shift+C` | 전체 프롬프트 복사 | `JSL.emit('copy:full')` |
 | `F7` | 맞춤법검사 | `JSL.action('spellCheck')` |
 | `Ctrl+S` | 저장 | `preventDefault()` 필수 (크롬 페이지저장 차단) |
 | `Tab` / `Shift+Tab` | 검수 하이라이트를 다음/이전 문장으로 | **답변 textarea 안에서만** — checkpoint가 처리 |
-| `Alt+↓` / `Alt+↑` | 위와 동일 (별칭) | Tab의 기본 포커스 이동을 지키고 싶을 때 |
 | `Esc` | 답변란 포커스 해제 | Tab을 가로챈 대신 남긴 탈출구 (preventDefault 안 함) |
 
 문장 이동 키는 hotkeys가 아니라 `checkpoint.js`가 답변 textarea에 직접 keydown을
