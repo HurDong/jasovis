@@ -51,7 +51,7 @@
 빌드 과정이 없습니다. 저장소를 그대로 로드하면 됩니다.
 
 ```bash
-git clone git@github.com:HurDong/jasovis.git
+git clone https://github.com/HurDong/jasovis.git
 ```
 
 1. 크롬에서 `chrome://extensions` 접속
@@ -87,14 +87,9 @@ assets/                아이콘 · 로고
 사이트 전역 CSS 오염이 심해서 **주입하는 UI는 전부 Shadow DOM 안에 렌더**합니다.
 
 인터페이스·상태 스키마·이벤트 계약·검증된 DOM 셀렉터의 단일 기준은 **[SPEC.md](SPEC.md)** 입니다.
-코드를 고치기 전에 그 문서를 먼저 읽으세요.
+개발 및 기여 시 해당 문서를 기준으로 합니다.
 
 ## 문서
 
 - [SPEC.md](SPEC.md) — 모듈 간 인터페이스 명세, 실페이지 검증 사실, 키맵, 디자인 규칙
 - [PRIVACY.md](PRIVACY.md) — 개인정보처리방침 (수집 없음)
-- [docs/notice-email.md](docs/notice-email.md) — 운영사 사전 고지 메일 초안
-
-## 라이선스
-
-아직 정하지 않았습니다.
