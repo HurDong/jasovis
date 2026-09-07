@@ -20,8 +20,21 @@
   },
   "content_scripts": [
     {
+      "matches": ["https://jasoseol.com/chat-slide*", "https://jasoseol.com/desktop/chat-slide*"],
+      "js": ["src/core/chat-react-main.js"],
+      "world": "MAIN",
+      "all_frames": true,
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://jasoseol.com/chat-slide*", "https://jasoseol.com/desktop/chat-slide*"],
+      "js": ["src/features/chat-reply.js"],
+      "all_frames": true,
+      "run_at": "document_idle"
+    },
+    {
       "matches": ["https://jasoseol.com/*"],
-      "js": ["src/core/bridge-main.js", "src/core/list-main.js"],
+      "js": ["src/core/bridge-main.js", "src/core/list-main.js", "src/core/chat-main.js"],
       "world": "MAIN",
       "run_at": "document_idle"
     },
@@ -33,6 +46,7 @@
         "src/features/dashboard.js",
         "src/features/jd-panel.js",
         "src/features/chat-jd.js",
+        "src/features/chat-reply.js",
         "src/features/copy.js",
         "src/features/paste.js",
         "src/features/spellcheck.js",
