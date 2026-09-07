@@ -3,7 +3,7 @@
   "name": "자비스 for 자소설닷컴",
   "version": "0.1.0",
   "description": "자소설닷컴용 비공식 도우미. 문항 대시보드, 복사, 자동 맞춤법검사, 단축키, 답변 뱅크, 전형 통계.",
-  "permissions": ["storage", "clipboardWrite"],
+  "permissions": ["storage", "clipboardWrite", "clipboardRead"],
   "icons": {
     "16": "assets/icon16.png",
     "48": "assets/icon48.png",
@@ -27,17 +27,23 @@
     },
     {
       "matches": ["https://jasoseol.com/*"],
+      "css": ["src/features/list-design.css"],
       "js": [
         "src/core/bridge.js",
         "src/features/dashboard.js",
         "src/features/jd-panel.js",
         "src/features/chat-jd.js",
         "src/features/copy.js",
+        "src/features/paste.js",
         "src/features/spellcheck.js",
         "src/features/hotkeys.js",
         "src/features/bank.js",
         "src/features/list-progress.js",
+        "src/features/list-layout.js",
+        "src/features/list-menu.js",
         "src/features/list-stats.js",
+        "src/features/list-sort.js",
+        "src/features/watch.js",
         "src/features/checkpoint.js"
       ],
       "run_at": "document_idle"

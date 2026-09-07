@@ -1,16 +1,12 @@
-// 목록 페이지: '작성 중' 카드 좌측에 문항 진행 타일 + 카드 밑변 세그먼트 (SPEC.md 참조)
+// 목록 페이지: '작성 중' 카드 하단에 작은 작성량 숫자 + 진행 막대 (SPEC.md 참조)
 // 대상: category === 0 (작성 중)만. 미제출(10)은 제외.
-// 디자인 I-1a: 카드 높이에 비례해 차오르던 옛 물채움(면적 인코딩)은 카드마다 높이가 달라
-//   나란히 놓았을 때 비교가 성립하지 않았다 → 모든 카드에서 같은 자리·같은 크기인
-//   46px 고정 타일(큰 숫자)과 밑변 세그먼트로 교체. 색+칸수+숫자 3중 인코딩(color-not-only).
-// 색은 사이트 테마인 주황 + 무채색만 쓴다. 목록의 이 카드들은 전부 '작성 중'(제출 전)이라
-//   문항을 다 채워도 '완료'가 아니다 — 완료 초록을 쓰면 안 된다.
+// 작성 숫자/전체 문항 수와 주황 막대를 함께 표시한다. 큰 좌측 타일은 제거한다.
+// 모든 문항을 채워도 제출 완료가 아니므로 완료 초록이나 '완료' 문구를 쓰지 않는다.
 // 주의: 사이트가 카드 리스트를 수시로 재렌더해 주입 노드가 날아간다(실페이지 검증됨)
 //       → onState(2초 주기) + MutationObserver로 재적용한다.
 JSL.register('list-progress', function () {
   'use strict';
 
-  var TILE_W = 46;   // 타일 폭(px). 이 값만큼 카드 본문을 오른쪽으로 밀어낸다.
   var MAX_SEG = 20;  // 세그먼트가 실오라기가 되지 않는 상한. 넘으면 비율로 근사한다.
 
   var progressById = {}; // { resumeId: {filled, total} }
@@ -21,38 +17,31 @@ JSL.register('list-progress', function () {
     var st = document.createElement('style');
     st.id = 'jsl-progress-style';
     st.textContent = [
-      'li.resume-node .jsl-tile{position:absolute;left:0;top:0;bottom:0;width:' + TILE_W + 'px;z-index:1;',
-      '  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;',
-      '  font-variant-numeric:tabular-nums;pointer-events:none;}',
-      'li.resume-node .jsl-num{font-size:21px;line-height:1;font-weight:700;}',
-      'li.resume-node .jsl-den{font-size:11.5px;line-height:1;font-weight:500;}',
-      'li.resume-node .jsl-seg{position:absolute;left:' + TILE_W + 'px;right:0;bottom:0;z-index:1;',
-      '  display:flex;gap:2px;pointer-events:none;}',
-      'li.resume-node .jsl-seg > span{flex:1;height:4px;background:#e8e5dd;}',
+      // 작성량은 카드 하단 우측에 둔다. 본문 폭은 list-design.css가 처음부터 확보한다.
+      '.scheduler ul.itemlist[category_key="0"] > li.resume-node[resume_node_id],',
+      '.scheduler li.resume-node[data-jsl-inset]{padding-left:12px !important;padding-bottom:12px !important;}',
+      'li.resume-node .jsl-tile{position:absolute;left:auto;top:auto;bottom:12px;right:65px;z-index:1;',
+      '  display:flex;flex-direction:row;align-items:baseline;gap:1px;background:transparent;',
+      '  font-variant-numeric:tabular-nums;pointer-events:none;white-space:nowrap;}',
+      'li.resume-node .jsl-tile::before{content:"작성";font-size:11px;margin-right:4px;color:#686d75;}',
+      'li.resume-node .jsl-num,li.resume-node .jsl-den{font-size:11px;line-height:1.5;font-weight:600;color:#292d32;}',
+      'li.resume-node .jsl-seg{position:absolute;left:auto;right:12px;bottom:17px;width:44px;z-index:1;',
+      '  display:flex;gap:1px;pointer-events:none;}',
+      'li.resume-node .jsl-seg > span{flex:1;height:3px;background:#e3e6e9;}',
       'li.resume-node .jsl-seg > span.on{background:#f26200;}',
-      // 미작성 — 무채색
-      'li.resume-node .jsl-t0{background:#f2f0e9;border-right:1px solid #dedbd1;}',
-      'li.resume-node .jsl-t0 .jsl-num{color:#6b6a63;} li.resume-node .jsl-t0 .jsl-den{color:#a5a29a;}',
-      // 작성 중 — 연주황
-      'li.resume-node .jsl-t1{background:#fff1e6;border-right:1px solid #ffdcc4;}',
-      'li.resume-node .jsl-t1 .jsl-num{color:#c74f00;} li.resume-node .jsl-t1 .jsl-den{color:#d8946a;}',
-      // 전 문항 채움 — 주황 반전
-      'li.resume-node .jsl-t2{background:#f26200;border-right:1px solid #d95500;}',
-      'li.resume-node .jsl-t2 .jsl-num{color:#fff;} li.resume-node .jsl-t2 .jsl-den{color:#ffcfa8;}'
+      'li.resume-node .jsl-t1 .jsl-num,li.resume-node .jsl-t2 .jsl-num,',
+      'li.resume-node .jsl-t2 .jsl-den,li.resume-node .jsl-t2::before{color:#a84000;}'
     ].join('\n');
     (document.head || document.documentElement).appendChild(st);
   }
 
-  // 카드 1장당 getComputedStyle은 최초 페인트 때 딱 1번만 부른다.
-  // (읽기/쓰기를 섞으면 카드 수만큼 강제 리플로우가 난다 — 145장 페이지에서 확인)
+  // 높이에 영향을 주는 여백은 위의 CSS가 미리 확보한다. 페인트는 공간을 더 늘리지 않는다.
   function reserveSpace(li) {
     if (li.hasAttribute('data-jsl-inset')) return;
     var cs = getComputedStyle(li);
     if (cs.position === 'static') li.style.position = 'relative';
     li.style.overflow = 'hidden';
     li.setAttribute('data-jsl-inset', '1');
-    li.style.paddingLeft = ((parseFloat(cs.paddingLeft) || 0) + TILE_W) + 'px';
-    li.style.paddingBottom = ((parseFloat(cs.paddingBottom) || 0) + 5) + 'px';
   }
 
   function releaseSpace(li) {
@@ -122,6 +111,9 @@ JSL.register('list-progress', function () {
 
   var mo = null;
 
+  // 상태 응답을 기다리는 동안에도 사이트의 첫 카드 측정에 여백이 반영되어야 한다.
+  ensureStyle();
+
   function applyAll() {
     try {
       ensureStyle();
@@ -158,7 +150,9 @@ JSL.register('list-progress', function () {
   var pullTimer = null;
   var pulling = false;
   var lastPull = 0;
-  var MIN_GAP = 250; // 연속 변경 중 요청이 몰리지 않게 하는 하한
+  var pendingSince = 0;
+  var MIN_GAP = 250;  // 연속 변경 중 요청이 몰리지 않게 하는 하한
+  var MAX_WAIT = 200; // 디바운스를 미룰 수 있는 상한
 
   function pull() {
     if (pulling) return; // 진행 중인 요청에 합류
@@ -172,11 +166,20 @@ JSL.register('list-progress', function () {
     });
   }
 
+  // 디바운스에 상한을 둔다. 상한이 없으면 사이트가 카드를 재생성하는 동안 변경이
+  // 60ms보다 촘촘히 쏟아져서 clearTimeout이 계속 걸리고, **변경이 멎을 때까지 재도색이
+  // 통째로 밀린다** — 실측 715~800ms 동안 타일이 사라져 있었다(2026-08-10 영상 분석).
+  // 그 사이 카드는 들여쓰기까지 풀린 사이트 원래 모습이라, 붙었다 떨어졌다 하는 것처럼 보인다.
   function schedulePull(delay) {
-    var wait = Math.max(delay, MIN_GAP - (Date.now() - lastPull));
+    var now = Date.now();
+    if (!pendingSince) pendingSince = now;
+    // 첫 변경으로부터 MAX_WAIT이 지났으면 더 미루지 않고 이미 걸린 타이머를 그대로 터뜨린다
+    if (pullTimer && now - pendingSince >= MAX_WAIT) return;
+    var wait = Math.max(delay, MIN_GAP - (now - lastPull));
     if (pullTimer) clearTimeout(pullTimer);
     pullTimer = setTimeout(function () {
       pullTimer = null;
+      pendingSince = 0;
       pull();
     }, wait);
   }
@@ -188,8 +191,17 @@ JSL.register('list-progress', function () {
   });
 
   // 재렌더·드래그 대응: 카드 영역이 바뀌면 상태를 즉시 다시 읽고 그린다
-  mo = new MutationObserver(function () {
-    schedulePull(60);
+  mo = new MutationObserver(function (records) {
+    if (location.pathname.indexOf('/resume_list') !== 0) return;
+    var relevant = records.some(function (record) {
+      var target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
+      if (target && target.closest('.jsl-tile, .jsl-seg')) return false;
+      var nodes = Array.from(record.addedNodes).concat(Array.from(record.removedNodes));
+      if (nodes.length && nodes.every(function (node) { return node.nodeType === 1 && node.matches('.jsl-tile, .jsl-seg'); })) return false;
+      if (target && target.closest('li.resume-node')) return true;
+      return nodes.some(function (node) { return node.nodeType === 1 && (node.matches('li.resume-node') || node.querySelector('li.resume-node')); });
+    });
+    if (relevant) schedulePull(60);
   });
   try {
     mo.observe(document.body, { childList: true, subtree: true });

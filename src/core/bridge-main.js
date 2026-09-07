@@ -175,6 +175,56 @@
       }
       return { ok: false };
     },
+    // 답변 본문 쓰기 — 스코프에 직접 넣는다. (실페이지 검증 2026-08-04)
+    //
+    // 왜 DOM(textarea)에 값을 넣지 않고 스코프에 쓰는가:
+    //   화면에 보이는 textarea.answer는 "지금 연 문항" 하나뿐이라, DOM 경로로 가면
+    //   문항마다 탭을 전환해야 한다. 반면 ng-model이 `qna.answer`라서 스코프에 쓰면
+    //   비활성 문항도 탭 전환 없이 그대로 반영되고 그 문항 글자수 카운터까지 갱신된다.
+    //   (이 기능의 목적 자체가 "문항 이동 없이 붙여넣기"다.)
+    //
+    // 같이 불러야 하는 것들 — 하나라도 빠지면 실제로 티가 난다:
+    //   · `qna_change(qna)` / `answer_keyup(qna)`: 사이트가 ng-change/ng-keyup로 걸어둔
+    //     글자수·하이라이트 갱신 훅. 타이핑과 같은 뒤처리를 태워준다.
+    //   · 보이는 textarea에 `input` 디스패치: checkpoint.js가 textarea 글자색을 투명하게
+    //     만들고 자기 미러 레이어에 글자를 그리는데, 그 미러는 input 이벤트로만 다시 그린다.
+    //     스코프만 바꾸면 미러가 옛 글을 그린 채 남아 **붙여넣은 글이 화면에서 안 보인다.**
+    //     (비활성 문항에 썼을 때도 그냥 쏜다 — 값이 그대로라 아무 일도 일어나지 않는다.)
+    //
+    // 반환 data.before = 덮어쓰기 전 원문. 되돌리기(undo)는 이 값을 다시 넣는 것으로 끝난다.
+    setAnswer: function (payload) {
+      const num = payload && Number(payload.number);
+      if (!num) return { ok: false };
+      const s = ensureScope();
+      if (!s || !s.qnas) return { ok: false };
+      let target = null;
+      const keys = Object.keys(s.qnas);
+      for (let i = 0; i < keys.length; i++) {
+        if (Number(s.qnas[keys[i]].number) === num) { target = s.qnas[keys[i]]; break; }
+      }
+      if (!target) return { ok: false };
+      const before = target.answer || '';
+      const text = payload.text == null ? '' : String(payload.text);
+      const write = function () {
+        target.answer = text;
+        if (typeof s.qna_change === 'function') s.qna_change(target);
+        if (typeof s.answer_keyup === 'function') s.answer_keyup(target);
+      };
+      try {
+        // 이미 digest 중이면 $apply가 예외를 던진다 — 그 경우엔 그냥 쓰고 다음 사이클에 맡긴다.
+        const root = s.$root || s;
+        if (root.$$phase) { write(); if (typeof s.$evalAsync === 'function') s.$evalAsync(function () {}); }
+        else s.$apply(write);
+      } catch (e) {
+        return { ok: false };
+      }
+      try {
+        const ta = document.querySelector('textarea.answer');
+        if (ta) ta.dispatchEvent(new Event('input', { bubbles: true }));
+      } catch (e) { /* 미러 동기화 실패는 치명적이지 않다 */ }
+      scheduleStateBroadcast();
+      return { ok: true, data: { before: before } };
+    },
     spellCheck: function () {
       // 툴바의 맞춤법검사 버튼은 토글이라, 패널이 이미 열려 있으면 닫혀버린다.
       // 패널이 열려 있으면(재검사하기 버튼이 보이면) 재검사를, 아니면 토글 버튼으로 연다.

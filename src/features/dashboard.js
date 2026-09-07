@@ -133,10 +133,23 @@
       return btn;
     },
 
-    // 문항 카드의 복사 버튼 — 등록 목록을 보관해 재렌더 후에도 유지.
-    // 렌더 시점의 문항 상태에 따라 완료=인라인 아이콘 / 작성중=강조 버튼으로 그려진다.
-    addQnaAction: function (number, labelHTML, onClick) {
-      var entry = { number: Number(number), labelHTML: labelHTML, onClick: onClick, el: null };
+    // 문항 카드의 액션 버튼(복사·붙여넣기) — 등록 목록을 보관해 재렌더 후에도 유지.
+    // opts (선택): {icon, title, stages, emphasis}
+    //  - icon: 인라인 SVG 문자열 (생략 시 복사 아이콘)
+    //  - title: 툴팁 (생략 시 labelHTML)
+    //  - stages: 이 버튼을 보여줄 문항 상태 배열 ['empty','active','done'] (생략 시 전부)
+    //    복사는 빈 문항에서 의미가 없어 ['active','done']만 넘긴다.
+    //  - emphasis 'primary': 작성중(확장) 카드에서만 주황 채움 버튼으로 승격. 그 외엔 아이콘.
+    //    지정하지 않으면 어느 카드에서나 조용한 아이콘으로 그린다(붙여넣기가 이쪽).
+    addQnaAction: function (number, labelHTML, onClick, opts) {
+      opts = opts || {};
+      var entry = {
+        number: Number(number), labelHTML: labelHTML, onClick: onClick, el: null,
+        icon: opts.icon || COPY_ICON_SVG,
+        title: opts.title || null,
+        stages: Array.isArray(opts.stages) ? opts.stages : null,
+        emphasis: opts.emphasis || null
+      };
       qnaActions.push(entry);
       renderBody(); // 이미 렌더된 카드에 즉시 반영
       return entry.el;
@@ -311,25 +324,37 @@
     return '<b>' + c.effective + '</b><span class="dim">자</span>';
   }
 
-  // 등록된 복사 액션을 카드에 그린다. kind: 'btn'(강조) | 'ic'(인라인 아이콘)
-  function appendCopy(parent, num, kind) {
+  // 등록된 문항 액션(복사·붙여넣기)을 카드에 그린다.
+  // kind: 'btn'(작성중 확장 카드) | 'ic'(한 줄 카드) — emphasis:'primary'인 것만
+  // 'btn'에서 주황 채움 버튼이 되고, 나머지는 어디서나 조용한 아이콘이다.
+  // 등록 순서를 그대로 지켜 복사가 항상 붙여넣기 왼쪽에 온다(자리가 안 흔들리게).
+  function appendQnaActions(parent, num, kind, stage) {
+    var box = null;
     qnaActions.forEach(function (entry) {
       if (entry.number !== num) return;
+      if (entry.stages && entry.stages.indexOf(stage) === -1) return;
+      var solid = kind === 'btn' && entry.emphasis === 'primary';
       var b = document.createElement('button');
-      if (kind === 'btn') {
+      if (solid) {
         b.className = 'copy-btn';
-        b.innerHTML = COPY_ICON_SVG + '<span>' + (entry.labelHTML || '복사') + '</span>';
+        b.innerHTML = entry.icon + '<span>' + (entry.labelHTML || '') + '</span>';
       } else {
         b.className = 'copy-ic';
-        b.innerHTML = COPY_ICON_SVG;
-        b.title = '이 문항 답변 복사';
+        b.innerHTML = entry.icon;
       }
+      b.title = entry.title || entry.labelHTML || '';
+      b.setAttribute('aria-label', '문항 ' + num + ' ' + (entry.title || entry.labelHTML || ''));
       b.addEventListener('click', function (e) {
         e.stopPropagation(); // 카드 클릭(문항 전환)과 분리
         runAndFlash(b, entry.onClick, e);
       });
       entry.el = b;
-      parent.appendChild(b);
+      if (!box) {
+        box = document.createElement('span');
+        box.className = 'qna-btns';
+        parent.appendChild(box);
+      }
+      box.appendChild(b);
     });
   }
 
@@ -405,7 +430,9 @@
         cnt.className = 'cnt ' + s.stage + (s.over ? ' over' : '');
         cnt.innerHTML = countHTML(s);
         line.appendChild(cnt);
-        if (s.stage === 'done') appendCopy(line, num, 'ic'); // 완료는 인라인 복사 아이콘
+        // 인라인 아이콘 — 완료 카드는 복사+붙여넣기, 미작성 카드는 붙여넣기만
+        // (복사는 stages로 빈 문항을 제외한다: 빈 답변을 복사할 일이 없다)
+        appendQnaActions(line, num, 'ic', s.stage);
       }
       content.appendChild(line);
 
@@ -419,7 +446,7 @@
         big.innerHTML = bigCountHTML(s);
         row.appendChild(big);
 
-        appendCopy(row, num, 'btn');
+        appendQnaActions(row, num, 'btn', s.stage);
         content.appendChild(row);
 
         var fill = document.createElement('div');
@@ -645,6 +672,21 @@
     '  padding:1px 6px;font-size:10.5px;font-weight:700;color:#7a5f45;white-space:nowrap;}',
     '.ksep{color:#c0b0a0;font-size:10px;}',
     '.kdesc{font-size:12px;color:#3d342c;word-break:keep-all;}',
+    // ── 되묻는 토스트 (actions) ────────────────────────────────
+    // 붙여넣기가 남의 글을 덮어썼을 때처럼 "결정이 필요한" 알림. 자동으로 사라지지
+    // 않고(sticky) 버튼을 눌러야 닫히므로, 컨테이너의 pointer-events:none을 되돌린다.
+    '.toast.actionable{pointer-events:auto;}',
+    '.tprev{display:block;margin-top:7px;font-size:11px;font-weight:400;color:#8a7a6a;',
+    '  background:#fffaf5;border:1px solid #f2e3d3;border-radius:7px;padding:6px 8px;',
+    '  line-height:1.5;max-height:46px;overflow:hidden;word-break:break-all;}',
+    '.tacts{display:flex;gap:6px;margin-top:9px;justify-content:flex-end;}',
+    '.tact{border:1px solid #f0d9c2;background:#fff;color:#5f5347;font-size:11.5px;',
+    '  font-weight:700;font-family:inherit;padding:6px 12px;border-radius:8px;cursor:pointer;',
+    '  transition:background .15s,color .15s,border-color .15s;}',
+    '.tact:hover{background:#fff1e8;color:#e05e00;border-color:#ffb377;}',
+    '.tact.primary{background:#ff6a00;color:#fff;border-color:#ff6a00;}',
+    '.tact.primary:hover{background:#f25e00;color:#fff;border-color:#f25e00;}',
+    '.tact:focus-visible{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px #e05e00;}',
     // 모션 최소화 설정을 켠 사용자에게는 페이드만 남기고 전부 끈다
     '@media (prefers-reduced-motion:reduce){',
     '  .toast{animation:none;}.toast.bump{animation:none;}',
@@ -754,14 +796,24 @@
     if (typeof payload === 'string' || payload == null) payload = { message: payload };
     var kind = payload.kind || 'info';
     var isHelp = kind === 'help';
+    var acts = Array.isArray(payload.actions) ? payload.actions.filter(Boolean) : [];
+    var isActionable = !isHelp && acts.length > 0;
     var message = String(payload.message == null ? '' : payload.message);
+
+    // id가 있으면 같은 id의 기존 토스트를 먼저 걷어낸다. 되묻는 토스트는 자동으로
+    // 안 사라지므로, 연속으로 붙여넣으면 결정 안 된 옛 토스트가 계속 쌓인다.
+    if (payload.id) {
+      for (var pi = liveToasts.length - 1; pi >= 0; pi--) {
+        if (liveToasts[pi].id === payload.id) dismissToast(liveToasts[pi]);
+      }
+    }
 
     // 같은 알림 연타(Ctrl+S 연속 저장 등)는 새로 쌓지 않고 기존 것을 튕기고 타이머만 리셋.
     // 예전엔 누른 만큼 박스가 쌓여 화면을 밀어 올렸다.
     // sub까지 key에 넣는다 — 같은 문항을 고쳐서 다시 복사하면 글자수가 달라지므로,
     // 그때는 병합하지 말고 새 토스트로 보여줘야 숫자가 낡지 않는다.
     var key = kind + '|' + message + '|' + (payload.sub || '');
-    if (!isHelp) {
+    if (!isHelp && !isActionable) { // 되묻는 토스트는 병합하지 않는다 — 건마다 되돌릴 대상이 다르다
       for (var i = 0; i < liveToasts.length; i++) {
         if (liveToasts[i].key === key) {
           var rec = liveToasts[i];
@@ -782,8 +834,8 @@
     }
 
     var t = document.createElement('div');
-    t.className = 'toast ' + kind;
-    var record = { el: t, key: key, timer: null, onDismiss: null };
+    t.className = 'toast ' + kind + (isActionable ? ' actionable' : '');
+    var record = { el: t, key: key, id: payload.id || null, timer: null, onDismiss: null };
 
     if (isHelp) {
       var closeBtn = buildHelpToast(t, payload);
@@ -809,18 +861,50 @@
       var msg = makeSpan('tmsg', message);
       // sub: 본문 아래 한 단계 작은 보조 줄 (예: '799자 · 공백제외 616자')
       if (payload.sub) msg.appendChild(makeSpan('tsub', String(payload.sub)));
+      // prev: 덮어쓴 원문 미리보기 상자 (되돌릴 게 뭔지 눈으로 확인하는 용도)
+      if (payload.prev) msg.appendChild(makeSpan('tprev', String(payload.prev)));
       t.appendChild(msg);
-      var bar = document.createElement('span');
-      bar.className = 'tbar';
-      var ms = typeof payload.duration === 'number' ? payload.duration : TOAST_MS;
-      bar.style.animationDuration = ms + 'ms';
-      t.appendChild(bar);
-      record.timer = setTimeout(function () { dismissToast(record); }, ms);
+
+      if (isActionable) {
+        // 결정이 필요한 알림 — 자동소멸도, 남은시간 바도 없다. 버튼을 눌러야 닫힌다.
+        var row = document.createElement('div');
+        row.className = 'tacts';
+        acts.forEach(function (a) {
+          var ab = document.createElement('button');
+          ab.className = 'tact' + (a.primary ? ' primary' : '');
+          ab.textContent = String(a.label || '');
+          ab.addEventListener('click', function (e) {
+            e.stopPropagation();
+            dismissToast(record);
+            try { if (typeof a.onClick === 'function') a.onClick(); }
+            catch (err) { console.warn('[자비스] 토스트 액션 오류', err); }
+          });
+          row.appendChild(ab);
+        });
+        msg.appendChild(row);
+      } else {
+        var bar = document.createElement('span');
+        bar.className = 'tbar';
+        var ms = typeof payload.duration === 'number' ? payload.duration : TOAST_MS;
+        bar.style.animationDuration = ms + 'ms';
+        t.appendChild(bar);
+        record.timer = setTimeout(function () { dismissToast(record); }, ms);
+      }
     }
 
     els.toasts.appendChild(t);
+    record.sticky = isActionable;
     liveToasts.push(record);
-    while (liveToasts.length > TOAST_MAX) dismissToast(liveToasts[0]);
+    // 개수 제한 — 되묻는 토스트(sticky)는 넘기지 않는다. 뒤이어 뜬 알림 몇 개에 밀려
+    // 되돌리기 버튼이 소리 없이 사라지면, 덮어쓴 글을 복구할 길이 없어진다.
+    while (liveToasts.length > TOAST_MAX) {
+      var victim = null;
+      for (var vi = 0; vi < liveToasts.length; vi++) {
+        if (!liveToasts[vi].sticky) { victim = liveToasts[vi]; break; }
+      }
+      if (!victim) break; // 전부 sticky면 그냥 둔다
+      dismissToast(victim);
+    }
   }
 
   // ── 초기화 ────────────────────────────────────────────────
@@ -961,6 +1045,8 @@
         '.card-sub{margin-top:7px;padding-left:29px;font-size:10.5px;color:#b3a493;}',
         '.card-warn{margin:0 14px 5px;font-size:12px;font-weight:700;color:#ef4444;}',
         // 복사 — 작성중은 강조 버튼, 완료는 인라인 아이콘
+        // 한 카드에 버튼이 둘(복사·붙여넣기) 이상 붙으므로 묶음으로 간격을 준다
+        '.qna-btns{flex:none;display:inline-flex;align-items:center;gap:4px;}',
         '.copy-btn{flex:none;display:inline-flex;align-items:center;gap:4px;border:0;cursor:pointer;',
         '  background:#ff6a00;color:#fff;font-size:11.5px;font-weight:700;font-family:inherit;',
         '  padding:5px 11px;border-radius:7px;transition:background .15s,transform .1s;}',
@@ -1172,6 +1258,14 @@
       // 토스트 구독
       JSL.on('toast', function (payload) {
         showToast(payload); // {message, kind, items, duration} — showToast가 형태를 흡수한다
+      });
+      // id로 띄운 토스트를 띄운 쪽에서 직접 닫는다 (되묻는 토스트가 무의미해졌을 때)
+      JSL.on('toast:close', function (payload) {
+        var id = payload && payload.id;
+        if (!id) return;
+        for (var i = liveToasts.length - 1; i >= 0; i--) {
+          if (liveToasts[i].id === id) dismissToast(liveToasts[i]);
+        }
       });
 
       // 10초 내 state가 한 번도 안 오면 안내 문구 상태로 조용히 대기

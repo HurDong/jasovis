@@ -193,9 +193,10 @@ JSL.register('copy', function () {
     state.qnas.forEach(function (qna) {
       if (addedQnaButtons[qna.number]) return;
       try {
+        // 빈 문항에는 달지 않는다 — 복사할 답변이 없다. (붙여넣기 버튼이 대신 그 자리에 온다)
         JSL.ui.addQnaAction(qna.number, '복사', function () {
           return copyQna(qna.number);
-        });
+        }, { title: '이 문항 답변 복사', stages: ['active', 'done'], emphasis: 'primary' });
         addedQnaButtons[qna.number] = true;
       } catch (e) {
         console.warn('[자비스] copy: 문항 버튼 추가 실패', qna.number, e);
