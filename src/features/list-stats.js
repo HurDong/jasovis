@@ -72,11 +72,18 @@ JSL.register('list-stats', function () {
     if (!bar) {
       bar = document.createElement('div');
       bar.id = BAR_ID;
-      // 보드(.scheduler를 감싸는 .resume-list-body) 상단에 삽입, 못 찾으면 검색줄 아래 대안
-      var body = document.querySelector('.resume-list-body');
-      if (body) body.insertBefore(bar, body.firstChild);
-      else return; // 구조 변경 시 조용히 포기 (다음 주기에 재시도)
       lastHTML = '';
+    }
+    // Keep native sort buttons and Angular handlers in place. The toolbar grid
+    // puts this sibling after 제목순, or on a full-width row when space is tight.
+    var sort = document.querySelector('.resume-search-body .sort-resume-list');
+    if (sort) {
+      sort.closest('.resume-search-body').classList.add('jsl-stats-toolbar');
+      if (bar.parentElement !== sort) sort.appendChild(bar);
+    } else {
+      var body = document.querySelector('.resume-list-body');
+      if (!body) return;
+      if (bar.parentElement !== body) body.insertBefore(bar, body.firstChild);
     }
     if (html !== lastHTML) {
       bar.innerHTML = html;

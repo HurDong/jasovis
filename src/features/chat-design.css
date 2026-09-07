@@ -1,0 +1,174 @@
+/* Shared chat theme. Keep native layout, alignment, input and history loading. */
+:is(.chat-container.chat-window, #chatBody, [data-sentry-component="ChatHeader"]) {
+  --jsl-chat-brand: #ff6813;
+  --jsl-chat-ink: #262626;
+  --jsl-chat-line: #d5d5d5;
+}
+:is(.chat-container.chat-window .chat-message-container, #chatBody) {
+  background: #fff !important;
+  scrollbar-width: thin;
+  scrollbar-color: #999 transparent;
+}
+:is(.chat-container.chat-window .chat-window-head, [data-sentry-component="ChatHeader"]) {
+  background: #fff !important;
+  border-bottom: 1px solid #d5d5d5 !important;
+}
+:is(.chat-container.chat-window .chat-info-wrapper, [data-sentry-component="ChatHeader"] > div:first-child) {
+  box-shadow: inset 3px 0 #ff6813;
+}
+:is(.chat-container.chat-window .chat-head-title, [data-sentry-component="ChatHeader"] a) {
+  color: #262626 !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+}
+:is(.chat-container.chat-window .chat-online-count, [data-sentry-component="ChatHeader"] .text-blue-600) {
+  color: #626262 !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+}
+:is(.chat-container.chat-window .show-sub-chat, [data-sentry-component="ChannelChatDropdown"]) {
+  background: #fff !important;
+  border-color: #d5d5d5 !important;
+  border-radius: 6px !important;
+  color: #626262 !important;
+}
+:is(.chat-container.chat-window .message-content, #chatBody [data-sentry-component="MessageContents"]) {
+  --jsl-bubble: #eceef1;
+  --jsl-bubble-text: #262626;
+  --jsl-bubble-border: transparent;
+  --jsl-quote-bg: rgba(45, 55, 65, .055);
+  --jsl-quote-hover: rgba(45, 55, 65, .09);
+  --jsl-quote-text: #626262;
+  --jsl-quote-label: #b84300;
+  --jsl-quote-line: #ff6813;
+  --jsl-focus: #b84300;
+  --jsl-highlight: inset 3px 0 #ff6813;
+  box-sizing: border-box;
+  padding: 9px 11px !important;
+  border: 1px solid var(--jsl-bubble-border) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  background: var(--jsl-bubble) !important;
+  color: var(--jsl-bubble-text) !important;
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+  overflow-wrap: anywhere;
+}
+/* Keep the native author grouping; only the start of an incoming group has
+   a directional corner. Consecutive messages retain the round corners. */
+#chatBody [id^="chat-message-"] > div:has(> [data-sentry-component="Author"]) [data-sentry-component="MessageContents"],
+.chat-container.chat-window .receive .message-content {
+  border-top-left-radius: 4px !important;
+}
+/* React renders self rows with flex-row-reverse, including consecutive messages.
+   Angular uses .send. Never infer authorship from nickname or message text. */
+:is(.chat-container.chat-window .send .message-content, #chatBody .flex-row-reverse > [data-sentry-component="MessageContents"]) {
+  --jsl-bubble: #ff6813;
+  --jsl-bubble-text: #fff;
+  --jsl-bubble-border: #ff6813;
+  --jsl-quote-bg: rgba(96, 32, 0, .18);
+  --jsl-quote-hover: rgba(96, 32, 0, .24);
+  --jsl-quote-text: #fff;
+  --jsl-quote-label: #fff;
+  --jsl-quote-line: rgba(255, 255, 255, .8);
+  --jsl-focus: #fff;
+  --jsl-highlight: 0 0 0 2px #fff, 0 0 0 4px #8d360a;
+  border-top-left-radius: 12px !important;
+  border-top-right-radius: 4px !important;
+}
+:is(.chat-container.chat-window .message-content, #chatBody [data-sentry-component="MessageContents"]) a {
+  color: inherit !important;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+:is(.chat-container.chat-window .message_target-message, #chatBody blockquote[data-sentry-component="TargetMessage"])[data-jsl-reply] {
+  position: relative;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 7px 24px 0 9px !important;
+  margin: 0 0 10px !important;
+  border: 0 !important;
+  border-left: 3px solid var(--jsl-quote-line) !important;
+  /* Reserve bottom breathing room outside the line-clamp clipping area. */
+  border-bottom: 7px solid transparent !important;
+  border-radius: 0 5px 5px 0 !important;
+  background: var(--jsl-quote-bg) !important;
+  color: var(--jsl-quote-text) !important;
+  font-size: 12px !important;
+  line-height: 1.55 !important;
+  /* One label line and two preview lines; the full quote stays in the DOM
+     and its accessible label, and clicking still opens the original. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+:is(.chat-container.chat-window .message_target-message, #chatBody blockquote[data-sentry-component="TargetMessage"])[data-jsl-reply]::before {
+  content: "원본 보기";
+  display: block;
+  margin-bottom: 3px;
+  color: var(--jsl-quote-label);
+  font-size: 11px;
+  font-weight: 600;
+}
+:is(.chat-container.chat-window .message_target-message, #chatBody blockquote[data-sentry-component="TargetMessage"])[data-jsl-reply]::after {
+  content: "↶";
+  position: absolute;
+  right: 8px;
+  top: 7px;
+  color: var(--jsl-quote-label);
+  font-size: 14px;
+}
+:is(.chat-container.chat-window .message_target-message, #chatBody blockquote[data-sentry-component="TargetMessage"])[data-jsl-reply]:is(:hover, [data-jsl-reply-active]) {
+  background: var(--jsl-quote-hover) !important;
+  text-decoration: none;
+}
+:is(.chat-container.chat-window .message_target-message, #chatBody blockquote[data-sentry-component="TargetMessage"])[data-jsl-reply]:focus-visible {
+  outline: 2px solid var(--jsl-focus);
+  outline-offset: 2px;
+}
+:is(.chat-container.chat-window .message-content.jsl-reply-highlight, #chatBody .jsl-reply-highlight [data-sentry-component="MessageContents"]) {
+  /* Retain each sender's background/text pair when navigating in either direction. */
+  background: var(--jsl-bubble) !important;
+  color: var(--jsl-bubble-text) !important;
+  border-color: #ff6813 !important;
+  box-shadow: var(--jsl-highlight) !important;
+}
+#chatBody [data-sentry-component="MessageContents"].cursor-default,
+.chat-container.chat-window .deleted-message .message-content {
+  background: #f3f3f3 !important;
+  color: #626262 !important;
+  border-color: #d5d5d5 !important;
+}
+#chatBody [data-sentry-component="Author"] {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+}
+#chatBody [data-sentry-component="SentTime"] {
+  font-size: 10px !important;
+  color: #737373 !important;
+}
+#chatBody [data-sentry-component="ReplyButton"] .fill-current {
+  color: #b84300 !important;
+}
+:is(.chat-container.chat-window .chat-bottom-container, form > div:has(textarea[aria-label="채팅 메시지를 입력하세요"])) {
+  background: #fff !important;
+  border-top: 1px solid #d5d5d5 !important;
+}
+:is(.chat-container.chat-window .chat-input-text, textarea[aria-label="채팅 메시지를 입력하세요"]) {
+  box-sizing: border-box;
+  background: #fff !important;
+  color: #262626 !important;
+  border: 1px solid #d5d5d5 !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+}
+:is(.chat-container.chat-window .chat-input-text, textarea[aria-label="채팅 메시지를 입력하세요"]):focus-visible {
+  border-color: #b84300 !important;
+  outline: 1px solid #b84300 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.chat-container.chat-window .message_target-message, #chatBody blockquote[data-sentry-component="TargetMessage"])[data-jsl-reply] { transition: none; }
+}

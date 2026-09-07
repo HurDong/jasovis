@@ -19,18 +19,7 @@
     if (!rec) return;
     clearTimeout(rec.timer); pending.delete(d.id); rec.resolve(d.result || { ok: false });
   });
-  const style = document.createElement('style');
-  style.textContent = quoteSelector + '[data-jsl-reply]{position:relative;box-sizing:border-box;min-height:44px;padding:6px 24px 6px 10px;border-left:2px solid #c9cfd7;border-bottom:0;border-radius:2px 6px 6px 2px;cursor:pointer;color:#606a76!important;background:rgba(100,116,139,.035);font-size:12px!important;line-height:1.55!important;transition:background-color 140ms ease,border-color 140ms ease}' +
-    '.chat-container.chat-window .send .message_target-message[data-jsl-reply]{color:#fff!important;border-left-color:#d7defb;background:rgba(24,34,68,.30)}' +
-    quoteSelector + '[data-jsl-reply]::before{content:"원본 보기";display:block;margin-bottom:3px;font-size:11px;font-weight:600;letter-spacing:0;color:inherit}' +
-    quoteSelector + '[data-jsl-reply]::after{content:"";position:absolute;right:7px;top:9px;width:13px;height:13px;background:currentColor;opacity:.5;mask:url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'black\' stroke-width=\'1.8\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'M9 14 4 9l5-5M4 9h10a6 6 0 0 1 6 6v5\'/%3E%3C/svg%3E") center/contain no-repeat}' +
-    quoteSelector + '[data-jsl-reply]:hover,' + quoteSelector + '[data-jsl-reply-active]{color:#515b67!important;border-left-color:#df813e!important;background:#fff3e9!important;text-decoration:none}' +
-    quoteSelector + '[data-jsl-reply]:focus-visible{outline:2px solid #b9571c;outline-offset:3px}' +
-    '.chat-container.chat-window .message-content.jsl-reply-highlight{color:#39424e!important;background-color:#fff1e5!important;box-shadow:inset 3px 0 #e78742!important;transition:background-color 160ms ease!important}' +
-    '.chat-container.chat-window .message-content.jsl-reply-highlight .message_target-message[data-jsl-reply]{color:#606a76!important;border-left-color:#d9b89f;background:transparent}' +
-    '#chatBody [id^="chat-message-"].jsl-reply-highlight [data-sentry-component="MessageContents"]{color:#39424e!important;background:#fff1e5!important;box-shadow:inset 3px 0 #e78742}' +
-    '@media(prefers-reduced-motion:reduce){' + quoteSelector + '[data-jsl-reply],.chat-container.chat-window .message-content.jsl-reply-highlight{transition:none!important}}';
-  document.head.appendChild(style);
+  // Shared chat-design.css owns message and quote colors for both renderers.
   function decorate(root) {
     const nodes = [];
     if (root.matches && root.matches(quoteSelector)) nodes.push(root);
@@ -49,9 +38,9 @@
     const shadow = host.attachShadow({ mode: 'open' });
     const arrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4H6a3 3 0 0 0-3 3v3a3 3 0 0 0 3 3h13m-5-5 5 5-5 5"/></svg>';
     shadow.innerHTML = '<style>' +
-      ':host{--accent:#b9571c;--warm:#fff1e5;--ink:#39424e;--muted:#67717e;--line:#e1e4e8;font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;color:var(--ink)}' +
-      '*{box-sizing:border-box}[hidden]{display:none!important}.bar{display:flex;align-items:center;max-width:inherit;gap:0;padding:3px;background:#fff;border:1px solid var(--line);border-radius:28px;box-shadow:0 4px 18px #18223014,0 1px 3px #1822300a;animation:appear 140ms ease-out}' +
-      'button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;font:inherit;font-weight:500;color:inherit;border:0;background:transparent;cursor:pointer;border-radius:24px;touch-action:manipulation;transition:background-color 140ms ease}button:hover{background:#f4f5f7}button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}svg{width:17px;height:17px;flex:none}.back{padding:0 14px 0 9px;white-space:nowrap}.back .icon{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;color:var(--accent);background:var(--warm)}' +
+      ':host{--accent:#b84300;--warm:transparent;--ink:#262626;--muted:#626262;--line:#d5d5d5;font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;color:var(--ink)}' +
+      '*{box-sizing:border-box}[hidden]{display:none!important}.bar{display:flex;align-items:center;max-width:inherit;gap:0;padding:3px;background:#fff;border:1px solid var(--line);border-radius:28px;box-shadow:0 2px 8px #00000010;animation:appear 140ms ease-out}' +
+      'button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;font:inherit;font-weight:500;color:inherit;border:0;background:transparent;cursor:pointer;border-radius:24px;touch-action:manipulation;transition:background-color 140ms ease}button:hover{background:#f4f4f4}button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}svg{width:17px;height:17px;flex:none}.back{padding:0 14px 0 9px;white-space:nowrap}.back .icon{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;color:var(--accent);background:var(--warm)}' +
       '.close{width:44px;flex:none;color:var(--muted)}.close svg{width:15px;height:15px}.status{padding:8px 5px;min-width:0;overflow-wrap:anywhere;font-size:12px;color:var(--muted)}.signal{width:16px;height:16px;margin-left:12px;margin-right:5px;flex:none;border:1.5px solid #e0e4e9;border-top-color:var(--accent);border-radius:50%;animation:spin 700ms linear infinite}.retry{min-width:48px;padding:0 8px;color:var(--accent);font-size:12px;white-space:nowrap}' +
       ':host([data-mode="ready"]) .signal{display:none}:host([data-mode="ready"]) .status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);padding:0}:host([data-mode="error"]) .bar{border-radius:16px}:host([data-mode="error"]) .signal{animation:none;border:0;border-radius:0;background:none;color:var(--muted);font-weight:600;text-align:center}:host([data-mode="error"]) .signal::after{content:"!"}' +
       '@keyframes spin{to{transform:rotate(360deg)}}@keyframes appear{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}@media(prefers-reduced-motion:reduce){.bar,.signal{animation:none}button{transition:none}}' +

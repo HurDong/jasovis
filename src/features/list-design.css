@@ -3,10 +3,10 @@
 .scheduler ul.itemlist[category_key="0"] > li.resume-node .info { min-height: 18px; padding-right: 106px; }
 .scheduler ul.itemlist[category_key="0"] > li.resume-node .season { padding-right: 106px; }
 html.jsl-fit {
-  --jsl-ink: #242a31;
-  --jsl-muted: #515b66;
-  --jsl-line: #d4d9df;
-  --jsl-canvas: #f0f2f4;
+  --jsl-ink: #262626;
+  --jsl-muted: #626262;
+  --jsl-line: #d5d5d5;
+  --jsl-canvas: #f3f3f3;
   --jsl-accent: #b84300;
   --jsl-brand: #ff6813;
   /* parseInt(computed max-height)를 쓰는 원본 렌더러에 지수 표기를 넘기지 않는다. */
@@ -29,15 +29,32 @@ html.jsl-fit .resume-order-by { display: flex; flex-wrap: wrap; gap: 4px; margin
 html.jsl-fit .resume-order-by li { float: none !important; padding: 7px 9px !important; border: 0 !important; border-radius: 5px; color: var(--jsl-muted); }
 html.jsl-fit .resume-order-by li.active { background: white; color: var(--jsl-accent) !important; }
 
+/* Search, native sorting and stats share one row at desktop widths. Container
+   queries also respond to the chat panel opening, not just viewport resizing. */
+.resume-search-container:has(.jsl-stats-toolbar) { container: jsl-search / inline-size; }
+.resume-search-body.jsl-stats-toolbar { display: grid !important; grid-template-columns: minmax(220px,400px) max-content minmax(0,1fr) !important; gap: 12px 16px !important; align-items: center; height: auto !important; }
+.resume-search-body.jsl-stats-toolbar .resume-info { grid-column: 1 / -1; }
+.resume-search-body.jsl-stats-toolbar .sort-resume-list { display: contents !important; }
+.resume-search-body.jsl-stats-toolbar .resume-order-by { display: flex; flex-wrap: wrap; margin: 0 !important; padding: 0 !important; }
+.resume-search-body.jsl-stats-toolbar #jsl-stats-bar { box-sizing: border-box; min-width: 0; max-width: 100%; min-height: 38px; margin: 0; padding: 7px 12px; gap: 6px 12px; border-radius: 8px; }
+@container jsl-search (max-width: 1280px) {
+  .resume-search-body.jsl-stats-toolbar { grid-template-columns: minmax(220px,470px) minmax(0,1fr) !important; }
+  .resume-search-body.jsl-stats-toolbar #jsl-stats-bar { grid-column: 1 / -1; }
+}
+@container jsl-search (max-width: 600px) {
+  .resume-search-body.jsl-stats-toolbar { grid-template-columns: minmax(0,1fr) !important; }
+  .resume-search-body.jsl-stats-toolbar #jsl-stats-bar .sep { display: none; }
+}
+
 /* 세 scheduler-container의 DOM을 보존하면서 화면에는 다섯 열로 배치한다. */
 html.jsl-fit .scheduler { height: var(--jsl-board-h) !important; display: grid !important; grid-template-columns: minmax(0,2.1fr) repeat(3,minmax(0,1fr)) minmax(0,.85fr); gap: 12px; align-items: stretch; overflow: hidden !important; }
 html.jsl-fit .scheduler > .scheduler-container { display: contents !important; float: none !important; width: auto !important; min-width: 0 !important; margin: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; }
 html.jsl-fit .scheduler > .jsl-work-group { display: flex !important; flex-direction: column; gap: 0; height: 100% !important; min-height: 0; }
-html.jsl-fit .scheduler .scheduler-column { display: flex !important; flex-direction: column; float: none !important; width: auto !important; min-width: 0; min-height: 0; height: 100% !important; margin: 0 !important; padding: 0 !important; border: 1px solid var(--jsl-line); border-radius: 8px; background: #f5f6f8; }
+html.jsl-fit .scheduler .scheduler-column { display: flex !important; flex-direction: column; float: none !important; width: auto !important; min-width: 0; min-height: 0; height: 100% !important; margin: 0 !important; padding: 0 !important; border: 1px solid var(--jsl-line); border-radius: 8px; background: var(--jsl-canvas); }
 html.jsl-fit .scheduler .scheduler-column > .title { box-sizing: border-box; flex: 0 0 auto; min-height: 44px; margin: 0 !important; padding: 12px !important; text-align: left !important; font-size: 14px !important; color: var(--jsl-ink) !important; border-bottom: 1px solid var(--jsl-line); background: white; border-radius: 8px 8px 0 0; }
-html.jsl-fit .scheduler .scheduler-column > .list-scroll-area { flex: 1 1 auto; min-height: 0; height: auto !important; max-height: var(--jsl-board-h) !important; overflow-x: hidden; overflow-y: auto; padding: 0 8px 8px; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #929eab transparent; }
+html.jsl-fit .scheduler .scheduler-column > .list-scroll-area { flex: 1 1 auto; min-height: 0; height: auto !important; max-height: var(--jsl-board-h) !important; overflow-x: hidden; overflow-y: auto; padding: 0 8px 8px; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #999 transparent; }
 html.jsl-fit .scheduler .list-container { margin: 0 0 10px !important; min-height: 0 !important; }
-html.jsl-fit .scheduler .list-container > .header { position: sticky !important; top: 0; z-index: 3; background: #f5f6f8; margin: 0 !important; padding: 11px 4px 9px !important; }
+html.jsl-fit .scheduler .list-container > .header { position: sticky !important; top: 0; z-index: 3; background: var(--jsl-canvas); margin: 0 !important; padding: 11px 4px 9px !important; }
 html.jsl-fit .scheduler .list-container > .header .list-title { color: var(--jsl-muted) !important; font-size: 12px !important; }
 html.jsl-fit .scheduler .list-container > .header .arrow { top: 11px !important; right: 4px !important; }
 html.jsl-fit .scheduler ul.itemlist { min-height: 28px !important; }
@@ -48,19 +65,22 @@ html.jsl-fit .scheduler .dropzone.ng-hide { display: none !important; }
 html.jsl-fit .scheduler .jsl-writing-column { flex: 1 1 0; border: 0; background: transparent; }
 html.jsl-fit .scheduler .jsl-writing-column > .title { display: none !important; }
 html.jsl-fit .scheduler .jsl-writing-column > .list-scroll-area { display: flex; flex-direction: column; gap: 16px; padding: 0; overflow: visible; max-height: var(--jsl-render-h) !important; }
-html.jsl-fit .scheduler .jsl-pane { flex: 1.12 1 0; position: relative; overflow-x: hidden !important; overflow-y: auto !important; min-height: 0 !important; height: auto !important; max-height: none !important; margin: 0 !important; border: 1px solid var(--jsl-line); border-radius: 8px; background: #f5f6f8; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #929eab transparent; overscroll-behavior: contain; }
+html.jsl-fit .scheduler .jsl-pane { flex: 1.12 1 0; position: relative; overflow-x: hidden !important; overflow-y: auto !important; min-height: 0 !important; height: auto !important; max-height: none !important; margin: 0 !important; border: 1px solid var(--jsl-line); border-radius: 8px; background: var(--jsl-canvas); scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #999 transparent; overscroll-behavior: contain; }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] { flex-grow: .88; }
-html.jsl-fit .scheduler .jsl-pane:is([data-jsl-category="0"],[data-jsl-category="1"]) { border-color: #bfc8d2; box-shadow: 0 2px 3px #2533430a; }
-html.jsl-fit .scheduler .jsl-pane > .header { min-height: 44px; padding: 12px !important; border-bottom: 1px solid #c6ced7; background: #e9edf1; }
-html.jsl-fit .scheduler .jsl-pane[data-jsl-category="0"] > .header { background: #f3eee8; box-shadow: inset 3px 0 0 var(--jsl-brand); }
-html.jsl-fit .scheduler .jsl-pane > .header .list-title { color: var(--jsl-ink) !important; font-weight: 650; font-size: 14px !important; }
-/* 제목은 카드와 다른 면·아이콘으로 구분한다. 색은 제목 띠에만 사용한다. */
+html.jsl-fit .scheduler .jsl-pane:is([data-jsl-category="0"],[data-jsl-category="1"]) { border-color: var(--jsl-line); box-shadow: none; }
+html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] { border-top-color: #8b9fb3; }
+html.jsl-fit .scheduler .jsl-pane > .header { min-height: 44px; padding: 12px !important; border-bottom: 1px solid var(--jsl-line); background: white; }
+html.jsl-fit .scheduler .jsl-pane[data-jsl-category="0"] > .header { background: #fff6ef; box-shadow: inset 3px 0 0 var(--jsl-brand); }
+html.jsl-fit .scheduler .jsl-pane > .header .list-title { color: var(--jsl-ink) !important; font-weight: 700; font-size: 14px !important; }
+/* 제목 줄의 따뜻한 주황·회청색과 아이콘으로 두 상태를 구분한다. */
 html.jsl-fit .scheduler .jsl-pane:is([data-jsl-category="0"],[data-jsl-category="1"]) > .header .list-title { display: inline-flex; align-items: center; gap: 8px; line-height: 20px; }
-html.jsl-fit .scheduler .jsl-pane:is([data-jsl-category="0"],[data-jsl-category="1"]) > .header .list-title::before { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 4px; font-size: 13px; font-weight: 600; }
-html.jsl-fit .scheduler .jsl-pane[data-jsl-category="0"] > .header .list-title::before { content: "✎"; background: #e8dfd4; color: #785c43; }
-html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .header .list-title::before { content: "✓"; background: #d8e0e8; color: #4b6175; }
+html.jsl-fit .scheduler .jsl-pane:is([data-jsl-category="0"],[data-jsl-category="1"]) > .header .list-title::before { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px; width: 24px; height: 22px; border-radius: 4px; font-size: 13px; font-weight: 600; }
+html.jsl-fit .scheduler .jsl-pane[data-jsl-category="0"] > .header .list-title::before { content: "✎"; background: #fff0e5; color: #b84300; }
+html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .header .list-title::before { content: "✓"; background: #d6e1ec; color: #46627f; }
 html.jsl-fit .scheduler .jsl-pane > .header .arrow { top: 13px !important; right: 8px !important; }
 html.jsl-fit .scheduler .jsl-pane > .dropzone { padding: 9px; margin: 0 !important; height: auto !important; }
+/* 오른쪽의 얇은 스크롤바 공간을 고려해 왼쪽 본문도 전형 칼럼과 비슷한 안쪽 여백을 둔다. */
+html.jsl-fit .scheduler .jsl-pane:is([data-jsl-category="0"],[data-jsl-category="1"]) > .dropzone { padding: 8px 8px 8px 18px; }
 html.jsl-fit .scheduler .jsl-pane:has(> .dropzone.ng-hide) { flex: 0 0 auto; }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="10"] { flex: 0 1 auto; max-height: min(88px,calc(var(--jsl-board-h) * .12)) !important; }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="10"]:not(:has(li[resume_node_id])) { border: 0; background: transparent; }
@@ -76,16 +96,15 @@ html.jsl-fit .scheduler .jsl-grid-column .dropzone > ul.itemlist:not(.header-ite
 html.jsl-fit .scheduler .jsl-grid-column .dropzone > ul.itemlist > li:not(.ui-sortable-helper) { position: relative !important; width: auto !important; top: auto !important; left: auto !important; margin: 0 !important; }
 html.jsl-fit .scheduler .jsl-grid-column .append-placeholder { display: none !important; }
 html.jsl-fit .scheduler .jsl-grid-column.column1 .list-scroll-area { overflow-anchor: none; }
-html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node { box-sizing: border-box; padding: 12px !important; margin-bottom: 7px; border: 1px solid var(--jsl-line); border-radius: 6px; background: white; box-shadow: 0 1px 2px #2533430d; color: var(--jsl-ink); }
+html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node { box-sizing: border-box; padding: 12px !important; margin-bottom: 7px; border: 1px solid var(--jsl-line); border-radius: 6px; background: white; box-shadow: none; color: var(--jsl-ink); }
 html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node .name { color: var(--jsl-ink); font-size: 13px; line-height: 1.55; font-weight: 500; word-break: keep-all; overflow-wrap: anywhere; }
-html.jsl-fit .scheduler .jsl-writing-column li.resume-node .name { font-weight: 600; }
 /* 제출 완료는 제목 한 줄로 높이를 통일해 두 열의 행을 맞춘다. */
 html.jsl-fit .scheduler ul.itemlist[category_key="1"] > li.resume-node { display: flex; align-items: center; min-width: 0; height: 48px !important; min-height: 48px !important; }
 html.jsl-fit .scheduler ul.itemlist[category_key="1"] > li.resume-node .name { width: 100%; min-width: 0; margin: 0 !important; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; word-break: normal; }
 html.jsl-fit .scheduler ul.itemlist[category_key="1"] > li.resume-node .info,
 html.jsl-fit .scheduler ul.itemlist[category_key="1"] > li.resume-node .season { display: none !important; }
-html.jsl-fit .scheduler .dropzone ul.itemlist.fail > li.resume-node { background: #eceff2; border-color: #d4d9df; }
-html.jsl-fit .scheduler .dropzone ul.itemlist.fail > li.resume-node .name { color: #505a66; }
+html.jsl-fit .scheduler .dropzone ul.itemlist.fail > li.resume-node { background: white; border-color: var(--jsl-line); }
+html.jsl-fit .scheduler .dropzone ul.itemlist.fail > li.resume-node .name { color: #646464; }
 html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node:hover { border-color: #d5a586; box-shadow: none; }
 html.jsl-fit .scheduler li.resume-node .info, html.jsl-fit .scheduler li.resume-node .season { color: var(--jsl-muted); font-size: 11px; line-height: 1.5; }
 html.jsl-fit .scheduler li.resume-node .info .end-time .d-day { padding: 0; margin-right: 6px; background: transparent; color: var(--jsl-accent); font-weight: 650; line-height: 18px; }
@@ -120,13 +139,13 @@ html.jsl-fit .scheduler .scheduler-column > .title { box-shadow: none; font-weig
 html.jsl-fit .scheduler .ai-resume-column > .title { box-shadow: none; }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="0"] > .header .list-title,
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="0"] > .header .arrow { color: var(--jsl-ink) !important; }
-html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .header { background: #e8edf2; box-shadow: inset 3px 0 0 #8093a5; }
+html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .header { background: #e6edf3; border-bottom-color: #c2ced9; box-shadow: inset 3px 0 0 #5e7d9a; }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .header .list-title { color: var(--jsl-ink) !important; }
-html.jsl-fit .scheduler ul.itemlist[category_key="0"] li.resume-node .d-day { background: #e4e8ed !important; color: var(--jsl-ink) !important; border-radius: 3px; font-weight: 700; }
+html.jsl-fit .scheduler ul.itemlist[category_key="0"] li.resume-node .d-day { background: #ebebeb !important; color: var(--jsl-ink) !important; border-radius: 3px; font-weight: 700; }
 html.jsl-fit .scheduler li.resume-node .jsl-tile::before { color: var(--jsl-muted); }
 html.jsl-fit .scheduler li.resume-node .jsl-num,
 html.jsl-fit .scheduler li.resume-node .jsl-den { color: var(--jsl-ink); }
-html.jsl-fit .scheduler li.resume-node .jsl-seg > span { background: #c7ced6; }
+html.jsl-fit .scheduler li.resume-node .jsl-seg > span { background: #d0d0d0; }
 html.jsl-fit .scheduler li.resume-node .jsl-seg > span.on { background: var(--jsl-brand); }
 html.jsl-fit .scheduler li.resume-node .jsl-t2 .jsl-num,
 html.jsl-fit .scheduler li.resume-node .jsl-t2 .jsl-den,
@@ -143,27 +162,30 @@ html.jsl-fit .scheduler ul.itemlist[category_key="0"] li.resume-node .end-time.s
 
 /* 전형의 순서와 합불 구분. 원본 제목/건수/접기 버튼 및 드롭 영역은 유지한다. */
 html.jsl-fit .scheduler .jsl-stage > .title { display: flex; align-items: center; gap: 8px; }
+/* 스크롤바 유무와 무관하게 본문의 좌우 여백과 첫 상태 제목의 시작 간격을 맞춘다. */
+html.jsl-fit .scheduler .jsl-stage > .list-scroll-area { padding-top: 8px; scrollbar-gutter: stable both-edges; }
 html.jsl-fit .scheduler .jsl-stage > .title,
 html.jsl-fit .scheduler .jsl-pane:is([data-jsl-category="0"],[data-jsl-category="1"]) > .header { box-sizing: border-box; min-height: 48px; }
 /* 단계 색은 제목 옆의 3px 띠와 작은 번호에만 쓴다. */
-html.jsl-fit .scheduler .jsl-stage > .title[data-jsl-stage-number="01"] { --jsl-stage-color: #8b9caf; --jsl-stage-tint: #edf1f5; --jsl-stage-ink: #53677d; }
-html.jsl-fit .scheduler .jsl-stage > .title[data-jsl-stage-number="02"] { --jsl-stage-color: #82a69e; --jsl-stage-tint: #edf3f1; --jsl-stage-ink: #496e65; }
-html.jsl-fit .scheduler .jsl-stage > .title[data-jsl-stage-number="03"] { --jsl-stage-color: #a092b2; --jsl-stage-tint: #f1eef5; --jsl-stage-ink: #6e607f; }
-html.jsl-fit .scheduler .jsl-stage > .title[data-jsl-stage-number="04"] { --jsl-stage-color: #b19d79; --jsl-stage-tint: #f5f1e9; --jsl-stage-ink: #796743; }
+html.jsl-fit .scheduler .jsl-stage > .title[data-jsl-stage-number="01"] { --jsl-stage-color: #527bb5; --jsl-stage-ink: #496a93; }
+html.jsl-fit .scheduler .jsl-stage > .title[data-jsl-stage-number="02"] { --jsl-stage-color: #348b77; --jsl-stage-ink: #346f61; }
+html.jsl-fit .scheduler .jsl-stage > .title[data-jsl-stage-number="03"] { --jsl-stage-color: #8464aa; --jsl-stage-ink: #725593; }
+html.jsl-fit .scheduler .jsl-stage > .title[data-jsl-stage-number="04"] { --jsl-stage-color: #ad8134; --jsl-stage-ink: #806127; }
 html.jsl-fit .scheduler .jsl-stage > .title { box-shadow: inset 3px 0 0 var(--jsl-stage-color); }
-html.jsl-fit .scheduler .jsl-stage > .title::before { content: attr(data-jsl-stage-number); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px; height: 21px; border-radius: 5px; background: var(--jsl-stage-tint); color: var(--jsl-stage-ink); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
-html.jsl-fit .scheduler .jsl-stage .list-container > .header { padding: 8px !important; margin-bottom: 8px !important; border-bottom: 1px solid #d3dae1; border-radius: 4px; background: #e9edf1; }
-html.jsl-fit .scheduler .jsl-stage .list-container + .list-container { padding-top: 8px; border-top: 1px solid #d3dae1; }
+html.jsl-fit .scheduler .jsl-stage > .title::before { content: attr(data-jsl-stage-number); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px; height: 22px; border-radius: 4px; background: #f2f2f2; color: var(--jsl-stage-ink); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* 상태 제목은 공고 카드와 달리 박스 없이 작은 배지로 표시한다. */
+html.jsl-fit .scheduler .jsl-stage .list-container > .header { box-sizing: border-box; display: flex; align-items: center; height: 38px; padding: 6px 0 !important; margin-bottom: 8px !important; border: 0; border-radius: 0; background: var(--jsl-canvas); box-shadow: none; }
+html.jsl-fit .scheduler .jsl-stage .list-container + .list-container { padding-top: 8px; border-top: 1px solid var(--jsl-line); }
 html.jsl-fit .scheduler .jsl-stage .list-container > .header .arrow { top: 10px !important; right: 8px !important; }
-html.jsl-fit .scheduler .jsl-stage .list-container > .header .list-title { display: inline-flex; align-items: center; gap: 5px; padding: 0; color: #59636e !important; line-height: 18px; font-weight: 600; }
-html.jsl-fit .scheduler .jsl-stage [data-jsl-result="pass"] > .header { background: #e8efec; border-bottom-color: #cddbd5; }
-html.jsl-fit .scheduler .jsl-stage [data-jsl-result="pass"] > .header .list-title { color: #35685f !important; }
-html.jsl-fit .scheduler .jsl-stage [data-jsl-result="pass"] > .header .list-title::before { content: "✓"; font-size: 11px; }
+html.jsl-fit .scheduler .jsl-stage .list-container > .header .list-title { display: inline-flex; align-items: center; gap: 6px; padding: 3px 7px; border-radius: 4px; background: #e7e7e7; color: #505050 !important; line-height: 18px; font-weight: 650; }
+html.jsl-fit .scheduler .jsl-stage [data-jsl-result="pass"] > .header .list-title { background: #e4f1e9; color: #216745 !important; }
+html.jsl-fit .scheduler .jsl-stage [data-jsl-result] > .header .list-title::before { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; font-size: 11px; color: white; }
+html.jsl-fit .scheduler .jsl-stage [data-jsl-result="pass"] > .header .list-title::before { content: "✓"; background: #298252; }
+html.jsl-fit .scheduler .jsl-stage [data-jsl-result="fail"] > .header .list-title::before { content: "×"; background: #707070; }
 html.jsl-fit .scheduler .jsl-stage [data-jsl-empty="true"] { margin-bottom: 2px !important; }
-html.jsl-fit .scheduler .jsl-stage [data-jsl-empty="true"] > .header { padding-top: 6px !important; padding-bottom: 5px !important; }
 /* 빈 안내는 각 합격/불합격 UL 안의 시각 요소다. 가짜 resume-node를 만들지 않는다. */
 html.jsl-fit .scheduler .jsl-stage [data-jsl-empty="true"] > .dropzone > ul:not(:has(li.resume-node, .sortable-placeholder)) { height: auto !important; min-height: 56px !important; }
-html.jsl-fit .scheduler .jsl-stage [data-jsl-empty="true"] > .dropzone > ul:not(:has(li.resume-node, .sortable-placeholder))::before { content: "아직 등록된 전형이 없습니다"; display: flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: 56px; padding: 12px; border: 1px dashed #c5cdd6; border-radius: 6px; background: #fafbfc; color: #727c87; text-align: center; font-size: 12px; line-height: 1.6; pointer-events: none; }
+html.jsl-fit .scheduler .jsl-stage [data-jsl-empty="true"] > .dropzone > ul:not(:has(li.resume-node, .sortable-placeholder))::before { content: "아직 등록된 전형이 없습니다"; display: flex; align-items: center; justify-content: center; box-sizing: border-box; min-height: 56px; padding: 12px; border: 1px dashed #c9c9c9; border-radius: 6px; background: white; color: #737373; text-align: center; font-size: 12px; line-height: 1.6; pointer-events: none; }
 
 /* 접기/펼치기는 즉시 반영한다. native 200ms 높이 보간을 기다리지 않는다. */
 html.jsl-fit .scheduler .dropzone { transition: none !important; animation: none !important; }

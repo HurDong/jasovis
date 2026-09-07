@@ -28,6 +28,7 @@
     },
     {
       "matches": ["https://jasoseol.com/chat-slide*", "https://jasoseol.com/desktop/chat-slide*"],
+      "css": ["src/features/chat-design.css"],
       "js": ["src/features/chat-reply.js"],
       "all_frames": true,
       "run_at": "document_idle"
@@ -40,7 +41,7 @@
     },
     {
       "matches": ["https://jasoseol.com/*"],
-      "css": ["src/features/list-design.css"],
+      "css": ["src/features/list-design.css", "src/features/chat-design.css"],
       "js": [
         "src/core/bridge.js",
         "src/features/dashboard.js",

@@ -514,12 +514,13 @@
     ':host{all:initial;display:block;}',
     '*{box-sizing:border-box;margin:0;padding:0;}',
     '.b{display:flex;align-items:center;gap:7px;width:100%;padding:9px 14px;border:none;',
-    '  border-top:1px solid #ffd9bd;border-bottom:1px solid #ffd9bd;background:#fff1e6;',
-    '  color:#c74f00;cursor:pointer;font-size:12px;font-weight:700;text-align:left;',
+    '  border-top:1px solid #f2dfd0;border-bottom:1px solid #f2dfd0;background:#fff5ed;',
+    '  color:#626262;cursor:pointer;font-size:12px;font-weight:500;text-align:left;min-height:44px;',
     '  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",',
     '  "Apple SD Gothic Neo",sans-serif;line-height:1.4;}',
-    '.b:hover{background:#ffe6d2;}',
-    '.b svg{flex:none;}',
+    '.b:hover{background:#ffebdc;}',
+    '.b:focus-visible{outline:2px solid #b84300;outline-offset:-3px;}',
+    '.b svg{flex:none;color:#b84300;}',
     '.b .lb{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
   ].join('\n');
 
