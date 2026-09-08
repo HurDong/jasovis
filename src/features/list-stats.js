@@ -72,12 +72,14 @@ JSL.register('list-stats', function () {
 
   // 지나온 구간의 화살촉은 그 단계 색, 아직 결과가 없는 구간은 회색.
   function chevron(st, i) {
-    var color = st.done > 0 ? 'var(--jsl-stage-' + i + ')' : '#dcdfe3';
+    var reached = st.done > 0;
+    var color = reached ? 'var(--jsl-stage-' + i + ')' : '#b9bfc6';
     var arm = function (cls, x) {
       return '<path class="' + cls + '" d="M' + x + ' 4l6 6-6 6" fill="none" stroke="' + color
         + '" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>';
     };
-    return '<span class="jsl-link"><svg width="30" height="20" viewBox="0 0 30 20" aria-hidden="true">'
+    return '<span class="jsl-link' + (reached ? '' : ' off') + '">'
+      + '<svg width="30" height="20" viewBox="0 0 30 20" aria-hidden="true">'
       + arm('c1', 7) + arm('c2', 15) + '</svg></span>';
   }
 

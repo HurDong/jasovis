@@ -67,21 +67,21 @@ html.jsl-fit .resume-order-by li:hover { color: var(--jsl-ink); }
 #jsl-track .jsl-link { flex: 0 0 auto; width: 30px; margin-left: auto; margin-right: auto; display: flex; align-items: center; justify-content: center; }
 #jsl-track .jsl-bd { display: flex; align-items: center; gap: 13px; min-width: 0; padding-left: 14px; }
 /* 숫자와 구성 막대를 나란히 둔다. 세로로 쌓으면 넓은 칸 왼쪽 끝에 몰려 보인다. */
-#jsl-track .jsl-entry .jsl-bd { display: flex; align-items: center; gap: 20px; flex: 0 0 auto; }
+#jsl-track .jsl-entry .jsl-bd { display: flex; align-items: center; gap: 24px; flex: 0 0 auto; padding-right: 24px; }
 #jsl-track .jsl-sum { flex: 0 0 auto; }
-#jsl-track .jsl-mix { flex: 0 0 auto; width: 320px; }
+#jsl-track .jsl-mix { flex: 0 0 auto; width: 400px; }
 #jsl-track .jsl-k { font-size: 11px; color: var(--jsl-dim); }
 #jsl-track .jsl-k b { font-weight: 600; color: var(--jsl-muted); }
 #jsl-track .jsl-big { font-size: 26px; font-weight: 700; letter-spacing: -.02em; color: var(--jsl-ink-strong); font-variant-numeric: tabular-nums; line-height: 1.25; }
 #jsl-track .jsl-big em { font-style: normal; font-size: 11px; font-weight: 500; color: var(--jsl-dim); margin-left: 4px; }
 #jsl-track .jsl-tf { margin-top: 2px; font-size: 12px; color: var(--jsl-muted); font-variant-numeric: tabular-nums; }
 #jsl-track .jsl-tf b { font-weight: 700; color: var(--jsl-ink-strong); }
-#jsl-track .jsl-comp { display: flex; gap: 3px; height: 8px; }
+#jsl-track .jsl-comp { display: flex; gap: 3px; height: 10px; }
 #jsl-track .jsl-comp span { border-radius: 4px; }
 #jsl-track .jsl-comp .w { background: var(--jsl-brand); }
 #jsl-track .jsl-comp .s { background: var(--jsl-navy); }
 #jsl-track .jsl-comp .r { background: #c9cdd4; }
-#jsl-track .jsl-legend { display: flex; flex-wrap: wrap; gap: 13px; margin-top: 8px; font-size: 11px; color: var(--jsl-dim); }
+#jsl-track .jsl-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 9px; font-size: 11px; color: var(--jsl-dim); }
 #jsl-track .jsl-legend span::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 2px; margin-right: 4px; vertical-align: 1px; }
 #jsl-track .jsl-legend .w::before { background: var(--jsl-brand); }
 #jsl-track .jsl-legend .s::before { background: var(--jsl-navy); }
@@ -95,6 +95,8 @@ html.jsl-fit .resume-order-by li:hover { color: var(--jsl-ink); }
 @keyframes jslChase { 0%, 60%, 100% { opacity: var(--lo); } 30% { opacity: var(--hi); } }
 #jsl-track .jsl-link .c1 { --lo: .45; --hi: 1; opacity: 1; animation: jslChase 1.7s ease-in-out infinite; }
 #jsl-track .jsl-link .c2 { --lo: .22; --hi: .7; opacity: .45; animation: jslChase 1.7s ease-in-out infinite .22s; }
+#jsl-track .jsl-link.off .c1 { animation: none; opacity: .95; }
+#jsl-track .jsl-link.off .c2 { animation: none; opacity: .5; }
 @media (prefers-reduced-motion: reduce) {
   #jsl-track .jsl-link .c1 { animation: none; opacity: 1; }
   #jsl-track .jsl-link .c2 { animation: none; opacity: .5; }
