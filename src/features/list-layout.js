@@ -154,52 +154,6 @@ JSL.register('list-layout', function () {
     });
   }
 
-
-  // 사이트의 목록 분기는 세로 위치만 보고 삽입 지점을 정한다. 2열 격자에서는 그래서
-  // 커서가 오른쪽 칸에 있어도 placeholder가 그 행의 왼쪽 칸에 놓인다.
-  // 커서가 가리키는 칸으로 placeholder만 옮긴다. 같은 ul 안에서만 움직이므로
-  // 카드가 다른 전형으로 넘어가는 판정은 건드리지 않는다. 카드·데이터·요청은 만들지 않는다.
-  function snapPlaceholder(x, y) {
-    if (!dragging) return;
-    var ph = document.querySelector('.scheduler .dropzone > ul.itemlist > .sortable-placeholder');
-    if (!ph) return;
-    var ul = ph.parentElement;
-    if (!ul || !ul.closest('.jsl-grid-column')) return;
-    var cards = Array.prototype.filter.call(ul.children, function (el) {
-      return el !== ph && el.matches('li.resume-node[resume_node_id]')
-        && !el.classList.contains('ui-sortable-helper') && el.offsetParent !== null;
-    });
-    if (!cards.length) return;
-    var best = null, bestScore = Infinity, after = false;
-    cards.forEach(function (el) {
-      var r = el.getBoundingClientRect();
-      if (!r.width || !r.height) return;
-      var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      // 행을 먼저 맞추고 같은 행 안에서 칸을 고른다.
-      var score = Math.abs(y - cy) * 3 + Math.abs(x - cx);
-      if (score < bestScore) { bestScore = score; best = el; after = x > cx; }
-    });
-    if (!best) return;
-    var ref = after ? best.nextSibling : best;
-    if (ref === ph || (after && best.nextSibling === ph)) return;
-    ul.insertBefore(ph, ref);
-  }
-
-  var snapPending = false, snapX = 0, snapY = 0;
-  function queueSnap(event) {
-    if (!dragging) return;
-    var point = event.touches && event.touches[0] ? event.touches[0] : event;
-    if (typeof point.clientX !== 'number') return;
-    snapX = point.clientX;
-    snapY = point.clientY;
-    if (snapPending) return;
-    snapPending = true;
-    requestAnimationFrame(function () {
-      snapPending = false;
-      try { snapPlaceholder(snapX, snapY); } catch (e) { /* 사이트 구조가 바뀌면 조용히 포기 */ }
-    });
-  }
-
   function restoreDrag() {
     if (!dragging) return;
     dragLists.forEach(function (ul) { ul.style.removeProperty('--jsl-hit-h'); });
@@ -210,7 +164,6 @@ JSL.register('list-layout', function () {
     });
     suspended = [];
     dragging = false;
-    snapPending = false;
     document.documentElement.style.removeProperty('--jsl-drag-h');
     schedule(0);
   }
@@ -222,8 +175,6 @@ JSL.register('list-layout', function () {
   document.addEventListener('touchcancel', restoreDrag, true);
   document.addEventListener('scroll', updateDragBounds, true);
   document.addEventListener('mousemove', updateDragBounds, true);
-  document.addEventListener('mousemove', queueSnap, true);
-  document.addEventListener('touchmove', queueSnap, { capture: true, passive: true });
   document.addEventListener('touchmove', updateDragBounds, { capture: true, passive: true });
   window.addEventListener('blur', restoreDrag);
 
