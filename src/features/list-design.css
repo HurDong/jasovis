@@ -192,3 +192,7 @@ html.jsl-fit .scheduler .dropzone { transition: none !important; animation: none
 html.jsl-fit .scheduler .dropzone.ng-hide-add:not(.ng-hide-remove) { display: none !important; }
 html.jsl-fit .scheduler .dropzone.ng-hide-remove:not(.ng-hide-add) { display: block !important; height: auto !important; opacity: 1 !important; }
 html.jsl-fit .scheduler .jsl-stage .list-container > .dropzone:not(.ng-hide) { height: auto !important; }
+/* 접기 화살표도 같은 처리를 한다. ngAnimate가 ng-hide-add 상태로 멈추면 ▼▲가 함께 보인다. */
+html.jsl-fit .scheduler .header .arrow > * { transition: none !important; animation: none !important; }
+html.jsl-fit .scheduler .header .arrow > .ng-hide-add:not(.ng-hide-remove) { display: none !important; }
+html.jsl-fit .scheduler .header .arrow > .ng-hide-remove:not(.ng-hide-add) { display: inline-block !important; }
