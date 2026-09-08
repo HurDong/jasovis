@@ -189,6 +189,7 @@
   document.addEventListener('keydown', handle, true);
   document.addEventListener('keydown', function (event) { if (event.key === 'Escape' && current) dismiss(); }, true);
   window.addEventListener('popstate', clear);
+  window.addEventListener('JSL_CHAT_TOOLS_OPEN', dismiss);
   window.addEventListener('pagehide', clear);
   window.addEventListener('resize', function () { if (current) { if (valid(current)) place(current); else clear(); } });
   const observer = new MutationObserver(function (records) {
