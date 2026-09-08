@@ -74,11 +74,11 @@ JSL.register('list-stats', function () {
   function chevron(st, i) {
     var color = st.done > 0 ? 'var(--jsl-stage-' + i + ')' : '#dcdfe3';
     var arm = function (cls, x) {
-      return '<path class="' + cls + '" d="M' + x + ' 3l5 5-5 5" fill="none" stroke="' + color
-        + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+      return '<path class="' + cls + '" d="M' + x + ' 4l6 6-6 6" fill="none" stroke="' + color
+        + '" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>';
     };
-    return '<span class="jsl-link"><svg width="22" height="16" viewBox="0 0 22 16" aria-hidden="true">'
-      + arm('c1', 6) + arm('c2', 12) + '</svg></span>';
+    return '<span class="jsl-link"><svg width="30" height="20" viewBox="0 0 30 20" aria-hidden="true">'
+      + arm('c1', 7) + arm('c2', 15) + '</svg></span>';
   }
 
   function build(s) {
