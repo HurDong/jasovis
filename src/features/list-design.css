@@ -99,9 +99,9 @@ html.jsl-fit .scheduler .jsl-writing-column > .title { display: none !important;
 html.jsl-fit .scheduler .jsl-writing-column > .list-scroll-area { display: flex; flex-direction: column; gap: 12px; padding: 0; overflow: visible; max-height: var(--jsl-render-h) !important; }
 /* 작성 중과 제출 완료는 각각 테두리 있는 패널이다. 카드가 잘려도 테두리가 받아주므로
    스크롤 중인 상태로 읽히고, 두 구역이 12px 간격으로 확실히 갈린다. */
-html.jsl-fit .scheduler .jsl-pane { flex: 1 1 0; position: relative; overflow-x: hidden !important; overflow-y: auto !important; min-height: 0 !important; height: auto !important; max-height: none !important; margin: 0 !important; border: 1px solid #e2e2e2; border-top: 0; border-radius: 6px; background: white; scrollbar-width: thin; scrollbar-color: #ccc transparent; overscroll-behavior: contain; }
-html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] { flex: 0 0 auto; max-height: min(360px, calc(var(--jsl-board-h) * .4)) !important; background: var(--jsl-navy-soft); border-color: var(--jsl-navy-line); }
-html.jsl-fit .scheduler .jsl-pane > .header { position: relative; min-height: 44px; padding: 12px 13px !important; border-bottom: 1px solid var(--jsl-line); background: white; }
+html.jsl-fit .scheduler .jsl-pane { flex: 1 1 0; position: relative; display: flex; flex-direction: column; overflow: hidden !important; min-height: 0 !important; height: auto !important; max-height: none !important; margin: 0 !important; border: 1px solid #e2e2e2; border-top: 0; border-radius: 6px; background: white; }
+html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] { flex: 0 0 auto; max-height: min(520px, calc(var(--jsl-board-h) * .55)) !important; background: var(--jsl-navy-soft); border-color: var(--jsl-navy-line); }
+html.jsl-fit .scheduler .jsl-pane > .header { position: relative; flex: 0 0 auto; min-height: 44px; padding: 12px 13px !important; border-bottom: 1px solid var(--jsl-line); background: white; }
 html.jsl-fit .scheduler .jsl-pane > .header::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--jsl-pane-accent, transparent); }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="0"] { --jsl-pane-accent: var(--jsl-brand); }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] { --jsl-pane-accent: var(--jsl-navy); }
@@ -113,7 +113,7 @@ html.jsl-fit .scheduler .jsl-pane:is([data-jsl-category="0"],[data-jsl-category=
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="0"] > .header .list-title::before { content: "작"; background: var(--jsl-brand); }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .header .list-title::before { content: "제"; background: var(--jsl-navy); }
 html.jsl-fit .scheduler .jsl-pane > .header .arrow { top: 13px !important; right: 8px !important; }
-html.jsl-fit .scheduler .jsl-pane > .dropzone { padding: 9px; margin: 0 !important; height: auto !important; }
+html.jsl-fit .scheduler .jsl-pane > .dropzone { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #ccc transparent; scrollbar-gutter: stable; padding: 9px; margin: 0 !important; height: auto !important; }
 html.jsl-fit .scheduler .jsl-pane:is([data-jsl-category="0"],[data-jsl-category="1"]) > .dropzone { padding: 10px 12px 12px; }
 html.jsl-fit .scheduler .jsl-pane:has(> .dropzone.ng-hide) { flex: 0 0 auto; }
 /* 미제출은 카드 영역을 차지하지 않고 같은 문법의 얇은 캡슐로 눕힌다. */
