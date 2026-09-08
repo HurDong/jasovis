@@ -100,7 +100,7 @@ html.jsl-fit .scheduler .jsl-writing-column > .list-scroll-area { display: flex;
 /* 작성 중과 제출 완료는 각각 테두리 있는 패널이다. 카드가 잘려도 테두리가 받아주므로
    스크롤 중인 상태로 읽히고, 두 구역이 12px 간격으로 확실히 갈린다. */
 html.jsl-fit .scheduler .jsl-pane { flex: 1 1 0; position: relative; display: flex; flex-direction: column; overflow: hidden !important; min-height: 0 !important; height: auto !important; max-height: none !important; margin: 0 !important; border: 1px solid #e2e2e2; border-top: 0; border-radius: 6px; background: white; }
-html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] { flex: 0 0 auto; max-height: min(520px, calc(var(--jsl-board-h) * .55)) !important; background: var(--jsl-navy-soft); border-color: var(--jsl-navy-line); }
+html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] { flex: 0 0 auto; height: min(520px, calc(var(--jsl-board-h) * .48)) !important; max-height: none !important; background: var(--jsl-navy-soft); border-color: var(--jsl-navy-line); }
 html.jsl-fit .scheduler .jsl-pane > .header { position: relative; flex: 0 0 auto; min-height: 44px; padding: 12px 13px !important; border-bottom: 1px solid var(--jsl-line); background: white; }
 html.jsl-fit .scheduler .jsl-pane > .header::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--jsl-pane-accent, transparent); }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="0"] { --jsl-pane-accent: var(--jsl-brand); }
@@ -115,7 +115,7 @@ html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .header .list-title::
 html.jsl-fit .scheduler .jsl-pane > .header .arrow { top: 13px !important; right: 8px !important; }
 html.jsl-fit .scheduler .jsl-pane > .dropzone { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #ccc transparent; scrollbar-gutter: stable; padding: 9px; margin: 0 !important; height: auto !important; }
 html.jsl-fit .scheduler .jsl-pane:is([data-jsl-category="0"],[data-jsl-category="1"]) > .dropzone { padding: 10px 12px 12px; }
-html.jsl-fit .scheduler .jsl-pane:has(> .dropzone.ng-hide) { flex: 0 0 auto; }
+html.jsl-fit .scheduler .jsl-pane:has(> .dropzone.ng-hide) { flex: 0 0 auto; height: auto !important; }
 /* 미제출은 카드 영역을 차지하지 않고 같은 문법의 얇은 캡슐로 눕힌다. */
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="10"] { flex: 0 1 auto; max-height: min(88px,calc(var(--jsl-board-h) * .12)) !important; background: var(--jsl-navy-soft); border-color: var(--jsl-navy-line); border-top: 1px solid var(--jsl-navy-line); }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="10"] > .header { min-height: 32px; padding: 6px 13px !important; background: transparent; border: 0; }
@@ -131,6 +131,8 @@ html.jsl-fit .scheduler .jsl-grid-column .dropzone > ul.itemlist:not(.header-ite
 html.jsl-fit .scheduler .jsl-grid-column .dropzone > ul.itemlist > li:not(.ui-sortable-helper) { position: relative !important; width: auto !important; top: auto !important; left: auto !important; margin: 0 !important; }
 html.jsl-fit .scheduler .jsl-grid-column .append-placeholder { display: none !important; }
 html.jsl-fit .scheduler .jsl-grid-column.column1 .list-scroll-area { overflow-anchor: none; }
+/* 드래그 동안 사이트는 DOM 순서로 삽입 지점을 잡는다. 화면도 한 열로 맞춰야 커서와 일치한다. */
+html.jsl-fit .scheduler .jsl-grid-column.column1 .dropzone > ul.itemlist:not(.header-itemlist) { grid-template-columns: minmax(0,1fr); }
 /* 카드 형태는 어디서나 같다. 상태는 좌측 3px 띠 색으로만 구분한다. */
 html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node { box-sizing: border-box; position: relative; padding: 11px 12px !important; margin-bottom: 6px; border: 1px solid var(--jsl-line); border-radius: var(--jsl-r); background: white; box-shadow: none; color: var(--jsl-ink); overflow: hidden; transition: box-shadow .13s ease, border-color .13s ease; }
 html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--jsl-stripe, transparent); }
@@ -167,7 +169,7 @@ html.jsl-fit .scheduler .ui-sortable-helper { z-index: 1000 !important; pointer-
 /* 끌고 있는 카드가 어디로 갈지 자리로 알려준다. 원본 placeholder는 삽입 지점에
    그대로 들어오므로, 그것을 빈 슬롯처럼 보이게 만들고 문구를 얹는다. */
 html.jsl-fit .scheduler .sortable-placeholder { box-sizing: border-box; position: relative !important; display: flex !important; align-items: center; justify-content: center; visibility: visible !important; width: auto !important; top: auto !important; left: auto !important; margin: 0 !important; min-height: var(--jsl-drag-h,70px); border: 2px dashed var(--jsl-brand) !important; background: var(--jsl-tint) !important; border-radius: var(--jsl-r); }
-html.jsl-fit .scheduler .sortable-placeholder::after { content: "여기에 놓기"; color: var(--jsl-accent); font-size: 11.5px; font-weight: 700; letter-spacing: -.01em; }
+html.jsl-fit .scheduler .sortable-placeholder::after { content: "여기에 놓기"; color: var(--jsl-accent); font-size: 11px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
 /* 목적지 칸 전체도 옅게 물들여 어느 구역으로 가는지 먼저 보이게 한다. */
 html.jsl-fit .scheduler .dropzone:has(.sortable-placeholder) { background: #fffaf6; }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .dropzone:has(.sortable-placeholder) { background: #f6f8fb; }
