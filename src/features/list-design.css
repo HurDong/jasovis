@@ -29,6 +29,12 @@ html.jsl-fit {
   --jsl-sh: 0 2px 5px rgba(0,0,0,.08);
   /* parseInt(computed max-height)를 쓰는 원본 렌더러에 지수 표기를 넘기지 않는다. */
   --jsl-render-h: 999999px;
+  /* 보드와 트랙이 같은 격자를 쓴다. 단계 색은 채도만 올라가 최종에서 브랜드 주황이 된다. */
+  --jsl-cols: minmax(0,2.1fr) repeat(3,minmax(0,1fr)) minmax(0,.85fr);
+  --jsl-stage-0: #a89c93;
+  --jsl-stage-1: #d9955f;
+  --jsl-stage-2: #f5802f;
+  --jsl-stage-3: #ff6813;
 }
 html.jsl-fit .scheduler-resume-list-ctrl { background: var(--jsl-canvas); }
 html.jsl-fit .resume-search-section { height: auto !important; min-height: 0 !important; padding-top: 15px; margin-bottom: 10px; background: var(--jsl-canvas); }
@@ -51,34 +57,48 @@ html.jsl-fit .resume-order-by { display: inline-flex; flex-wrap: wrap; gap: 2px;
 html.jsl-fit .resume-order-by li { float: none !important; padding: 6px 12px !important; border: 0 !important; border-radius: 5px; color: var(--jsl-muted); font-size: 12.5px; }
 html.jsl-fit .resume-order-by li:hover { color: var(--jsl-ink); }
 
-/* Search, native sorting and stats share one row at desktop widths. Container
-   queries also respond to the chat panel opening, not just viewport resizing. */
-.resume-search-container:has(.jsl-stats-toolbar) { container: jsl-search / inline-size; }
-.resume-search-body.jsl-stats-toolbar { display: grid !important; grid-template-columns: minmax(220px,400px) max-content minmax(0,1fr) !important; gap: 12px 16px !important; align-items: center; height: auto !important; }
-.resume-search-body.jsl-stats-toolbar .resume-info { grid-column: 1 / -1; }
-.resume-search-body.jsl-stats-toolbar .sort-resume-list { display: contents !important; }
-.resume-search-body.jsl-stats-toolbar .resume-order-by { display: inline-flex; flex-wrap: wrap; }
-.resume-search-body.jsl-stats-toolbar #jsl-stats-bar { box-sizing: border-box; min-width: 0; max-width: 100%; min-height: 38px; margin: 0; padding: 7px 12px; gap: 6px 12px; border-radius: 8px; }
-@container jsl-search (max-width: 1280px) {
-  .resume-search-body.jsl-stats-toolbar { grid-template-columns: minmax(220px,470px) minmax(0,1fr) !important; }
-  .resume-search-body.jsl-stats-toolbar #jsl-stats-bar { grid-column: 1 / -1; }
+
+
+/* ─── 여정 트랙 (list-stats.js) ───
+   보드와 같은 격자에 정렬해 각 단계 수치가 그 아래 카드 더미 위에 선다. */
+#jsl-track { display: grid; grid-template-columns: var(--jsl-cols, 1fr); align-items: center; padding: 2px 0 12px; }
+#jsl-track .jsl-tn { display: flex; align-items: center; min-width: 0; }
+#jsl-track .jsl-link { flex: 0 0 auto; width: 22px; display: flex; align-items: center; justify-content: center; }
+#jsl-track .jsl-bd { display: flex; align-items: center; gap: 13px; min-width: 0; padding-left: 6px; }
+#jsl-track .jsl-entry .jsl-bd { display: block; padding-left: 0; }
+#jsl-track .jsl-k { font-size: 11px; color: var(--jsl-dim); }
+#jsl-track .jsl-k b { font-weight: 600; color: var(--jsl-muted); }
+#jsl-track .jsl-big { font-size: 20px; font-weight: 700; letter-spacing: -.02em; color: var(--jsl-ink-strong); font-variant-numeric: tabular-nums; line-height: 1.25; }
+#jsl-track .jsl-big em { font-style: normal; font-size: 11px; font-weight: 500; color: var(--jsl-dim); margin-left: 4px; }
+#jsl-track .jsl-tf { margin-top: 2px; font-size: 12px; color: var(--jsl-muted); font-variant-numeric: tabular-nums; }
+#jsl-track .jsl-tf b { font-weight: 700; color: var(--jsl-ink-strong); }
+#jsl-track .jsl-comp { display: flex; gap: 2px; height: 6px; margin-top: 8px; max-width: 320px; }
+#jsl-track .jsl-comp span { border-radius: 3px; }
+#jsl-track .jsl-comp .w { background: var(--jsl-brand); }
+#jsl-track .jsl-comp .s { background: var(--jsl-navy); }
+#jsl-track .jsl-comp .r { background: #c9cdd4; }
+#jsl-track .jsl-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; font-size: 11px; color: var(--jsl-dim); }
+#jsl-track .jsl-legend span::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 2px; margin-right: 4px; vertical-align: 1px; }
+#jsl-track .jsl-legend .w::before { background: var(--jsl-brand); }
+#jsl-track .jsl-legend .s::before { background: var(--jsl-navy); }
+#jsl-track .jsl-legend .r::before { background: #c9cdd4; }
+/* 반원 게이지 — 숫자를 아크 입 안쪽에 앉힌다. */
+#jsl-track .jsl-gauge { position: relative; flex: 0 0 auto; width: 72px; height: 42px; }
+#jsl-track .jsl-gauge svg { display: block; }
+#jsl-track .jsl-gauge b { position: absolute; left: 0; right: 0; bottom: 1px; text-align: center; font-size: 16px; font-weight: 800; letter-spacing: -.02em; color: var(--jsl-ink-strong); font-variant-numeric: tabular-nums; line-height: 1; }
+#jsl-track .jsl-gauge.none b { color: var(--jsl-faint); font-weight: 700; }
+/* 앞 화살촉이 밝아지고 뒤 화살촉이 따라온다. 방향만 말하고 빠진다. */
+@keyframes jslChase { 0%, 60%, 100% { opacity: var(--lo); } 30% { opacity: var(--hi); } }
+#jsl-track .jsl-link .c1 { --lo: .30; --hi: .95; opacity: .85; animation: jslChase 1.7s ease-in-out infinite; }
+#jsl-track .jsl-link .c2 { --lo: .14; --hi: .55; opacity: .32; animation: jslChase 1.7s ease-in-out infinite .22s; }
+@media (prefers-reduced-motion: reduce) {
+  #jsl-track .jsl-link .c1 { animation: none; opacity: .9; }
+  #jsl-track .jsl-link .c2 { animation: none; opacity: .4; }
 }
-@container jsl-search (max-width: 600px) {
-  .resume-search-body.jsl-stats-toolbar { grid-template-columns: minmax(0,1fr) !important; }
-  .resume-search-body.jsl-stats-toolbar #jsl-stats-bar .sep { display: none; }
-}
-/* 통계바는 자체 style로 따뜻한 회갈 팔레트를 쓴다. 보드 토큰으로 되돌린다. */
-html.jsl-fit #jsl-stats-bar { border-color: var(--jsl-line-mid) !important; color: var(--jsl-muted) !important; font-family: inherit !important; }
-html.jsl-fit #jsl-stats-bar .label { color: var(--jsl-dim) !important; }
-html.jsl-fit #jsl-stats-bar b { color: var(--jsl-accent) !important; }
-html.jsl-fit #jsl-stats-bar b.dim { color: var(--jsl-faint) !important; }
-html.jsl-fit #jsl-stats-bar .frac { color: var(--jsl-muted) !important; }
-html.jsl-fit #jsl-stats-bar .sep { background: var(--jsl-line) !important; }
-html.jsl-fit #jsl-stats-bar .brand { color: #8c8c8c !important; }
 
 /* 세 scheduler-container의 DOM을 보존하면서 화면에는 다섯 열로 배치한다.
    열은 상자가 아니라 격자의 칸이다. 배경·테두리 없이 1px 헤어라인으로만 나눈다. */
-html.jsl-fit .scheduler { height: var(--jsl-board-h) !important; display: grid !important; grid-template-columns: minmax(0,2.1fr) repeat(3,minmax(0,1fr)) minmax(0,.85fr); gap: 0; align-items: stretch; overflow: hidden !important; border-top: 1px solid var(--jsl-line); }
+html.jsl-fit .scheduler { height: var(--jsl-board-h) !important; display: grid !important; grid-template-columns: var(--jsl-cols); gap: 0; align-items: stretch; overflow: hidden !important; border-top: 1px solid var(--jsl-line); }
 html.jsl-fit .scheduler > .scheduler-container { display: contents !important; float: none !important; width: auto !important; min-width: 0 !important; margin: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; }
 html.jsl-fit .scheduler > .jsl-work-group { display: flex !important; flex-direction: column; gap: 12px; height: 100% !important; min-height: 0; padding: 0 14px 10px 0; }
 html.jsl-fit .scheduler .scheduler-column { display: flex !important; flex-direction: column; float: none !important; width: auto !important; min-width: 0; min-height: 0; height: 100% !important; margin: 0 !important; padding: 0 !important; border: 0; background: transparent; }
@@ -175,13 +195,14 @@ html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .dropzone:has(.sortab
 .jsl-render-anchor > .list-scroll-area { width: 0 !important; height: 0 !important; max-height: 999999px !important; }
 html.jsl-fit .scheduler [tabindex]:focus-visible, html.jsl-fit .resume-search-field:focus-visible { outline: 2px solid var(--jsl-brand); outline-offset: -2px; }
 
-html.jsl-fit.jsl-compact .scheduler { grid-template-columns: minmax(0,1.95fr) repeat(3,minmax(0,1fr)) minmax(0,.9fr); }
+html.jsl-fit.jsl-compact { --jsl-cols: minmax(0,1.95fr) repeat(3,minmax(0,1fr)) minmax(0,.9fr); }
 html.jsl-fit.jsl-compact .scheduler .jsl-grid-column .dropzone > ul.itemlist:not(.header-itemlist) { grid-template-columns: minmax(0,1fr); }
 html.jsl-fit.jsl-compact .scheduler li.resume-node .season,
 html.jsl-fit.jsl-compact .scheduler ul.itemlist[category_key="0"] li.resume-node .end-time .date { display: none !important; }
 html.jsl-fit.jsl-compact .resume-search-body .date-range { display: none; }
 html.jsl-fit.jsl-compact .scheduler .scheduler-column > .title { padding: 0 10px !important; }
 html.jsl-fit.jsl-narrow .scheduler { grid-template-columns: minmax(0,1.5fr) repeat(2,minmax(0,1fr)); grid-template-rows: minmax(0,1fr) minmax(0,1fr); }
+html.jsl-fit.jsl-narrow #jsl-track { display: none; }
 html.jsl-fit.jsl-narrow .main-tab:has(.scheduler-resume-list-ctrl) { min-width: 0 !important; }
 html.jsl-fit.jsl-narrow .scheduler > .jsl-work-group { grid-row: 1 / -1; }
 html.jsl-fit.jsl-narrow .resume-search-body { grid-template-columns: minmax(0,1fr) auto; gap: 10px; }

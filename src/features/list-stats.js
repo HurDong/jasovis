@@ -1,12 +1,13 @@
-// 목록 페이지: 전형 단계별 통과율 통계 바 (SPEC.md '통계 산정식' 참조)
-// 포커스는 통과율 — 개수는 사이트가 이미 보여주므로 비율/분수 중심으로 표시한다.
+// 목록 페이지: 전형 여정 트랙 (SPEC.md '통계 산정식' 참조)
+// 통과율 산정식은 그대로 두고, 표시를 툴바 구석의 한 줄 바에서 보드 위 트랙으로 옮긴다.
+// 각 단계 수치가 그 아래 카드 더미 바로 위에 서도록 보드와 같은 격자에 정렬한다.
 JSL.register('list-stats', function () {
   'use strict';
 
-  var BAR_ID = 'jsl-stats-bar';
+  var TRACK_ID = 'jsl-track';
   var lastHTML = '';
 
-  // 카테고리 코드 (SPEC.md): 1 제출완료 / 2,3 서류 합불 / 6,7 1차 / 8,9 2차 / 4,5 최종
+  // 카테고리 코드 (SPEC.md): 0 작성중 / 1 제출완료 / 2,3 서류 합불 / 6,7 1차 / 8,9 2차 / 4,5 최종
   function compute(resumes) {
     var c = {};
     resumes.forEach(function (r) { c[r.category] = (c[r.category] || 0) + 1; });
@@ -16,77 +17,132 @@ JSL.register('list-stats', function () {
     var after1st = n(8) + n(9) + n(4) + n(5);
     var after2nd = n(4) + n(5);
 
+    var applied = n(1) + n(2) + n(3) + afterSeoryu;
+    var seoryu = { pass: n(2) + afterSeoryu, done: n(2) + n(3) + afterSeoryu };
+    var first = { pass: n(6) + after1st, done: n(6) + n(7) + after1st };
+    var second = { pass: n(8) + after2nd, done: n(8) + n(9) + after2nd };
+    var final = { pass: n(4), done: n(4) + n(5) };
+
+    // 도달 = 앞 단계를 통과해 이 단계로 흘러온 수. 대기 = 도달했는데 결과가 안 나온 수.
+    seoryu.reach = applied;
+    first.reach = seoryu.pass;
+    second.reach = first.pass;
+    final.reach = second.pass;
+    [seoryu, first, second, final].forEach(function (s) {
+      s.wait = Math.max(0, s.reach - s.done);
+    });
+
     return {
-      applied: n(1) + n(2) + n(3) + afterSeoryu,
-      waiting: n(1),
-      seoryu: { pass: n(2) + afterSeoryu, done: n(2) + n(3) + afterSeoryu },
-      first: { pass: n(6) + after1st, done: n(6) + n(7) + after1st },
-      second: { pass: n(8) + after2nd, done: n(8) + n(9) + after2nd },
-      final: { pass: n(4), done: n(4) + n(5) }
+      writing: n(0),
+      submitted: n(1),
+      resolved: applied - n(1),
+      applied: applied,
+      stages: [
+        { key: 'seoryu', name: '서류전형', st: seoryu },
+        { key: 'first', name: '1차 전형', st: first },
+        { key: 'second', name: '2차 전형', st: second },
+        { key: 'final', name: '3차 전형(최종)', st: final }
+      ]
     };
   }
 
-  // 표본 5 미만이면 %가 요동치므로 분수만, 이상이면 % + 분수
-  function fmt(st) {
-    if (st.done === 0) return '<b class="dim">–</b>';
-    if (st.done < 5) return '<b>' + st.pass + '/' + st.done + '</b>';
-    return '<b>' + (st.pass / st.done * 100).toFixed(1) + '%</b> <span class="frac">(' + st.pass + '/' + st.done + ')</span>';
+  // 표본 5 미만이면 %가 요동치므로 분수만, 이상이면 %
+  function label(st) {
+    if (!st.done) return '–';
+    if (st.done < 5) return st.pass + '/' + st.done;
+    return Math.round(st.pass / st.done * 100) + '%';
   }
 
-  function ensureStyle() {
-    if (document.getElementById('jsl-stats-style')) return;
-    var st = document.createElement('style');
-    st.id = 'jsl-stats-style';
-    st.textContent = [
-      '#' + BAR_ID + '{display:flex;align-items:center;gap:18px;flex-wrap:wrap;',
-      '  margin:6px 0 10px;padding:9px 16px;background:#fff;border:1px solid #f2e6dc;',
-      '  border-radius:12px;font-size:12.5px;color:#6b5f53;',
-      '  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;}',
-      '#' + BAR_ID + ' .item{display:flex;align-items:baseline;gap:6px;white-space:nowrap;}',
-      '#' + BAR_ID + ' .label{font-weight:600;color:#8a7c6d;}',
-      '#' + BAR_ID + ' b{color:#ff6a00;font-weight:800;font-size:13.5px;}',
-      '#' + BAR_ID + ' b.dim{color:#c4b3a1;}',
-      '#' + BAR_ID + ' .frac{color:#b3a493;font-size:11px;}',
-      '#' + BAR_ID + ' .sep{width:1px;height:14px;background:#f0e6db;}',
-      '#' + BAR_ID + ' .brand{margin-left:auto;font-size:10.5px;color:#d9cbbc;}'
-    ].join('\n');
-    (document.head || document.documentElement).appendChild(st);
+  var ARC = 'M8 36 A28 28 0 0 1 64 36';
+  var ARC_LEN = Math.PI * 28;
+
+  function gauge(st, i) {
+    var has = st.done > 0;
+    var rate = has ? st.pass / st.done * 100 : 0;
+    var fill = has
+      ? '<path d="' + ARC + '" fill="none" stroke="var(--jsl-stage-' + i + ')" stroke-width="8"'
+        + ' stroke-linecap="round" stroke-dasharray="' + (ARC_LEN * rate / 100).toFixed(1)
+        + ' ' + ARC_LEN.toFixed(1) + '"/>'
+      : '';
+    return '<span class="jsl-gauge' + (has ? '' : ' none') + '">'
+      + '<svg width="72" height="42" viewBox="0 0 72 42" aria-hidden="true">'
+      + '<path d="' + ARC + '" fill="none" stroke="#ebedf0" stroke-width="8" stroke-linecap="round"/>'
+      + fill + '</svg><b>' + label(st) + '</b></span>';
   }
 
-  function render(stats) {
-    ensureStyle();
-    var html =
-      '<span class="item"><span class="label">서류 통과율</span>' + fmt(stats.seoryu) + '</span>' +
-      '<span class="sep"></span>' +
-      '<span class="item"><span class="label">1차</span>' + fmt(stats.first) + '</span>' +
-      '<span class="sep"></span>' +
-      '<span class="item"><span class="label">2차</span>' + fmt(stats.second) + '</span>' +
-      '<span class="sep"></span>' +
-      '<span class="item"><span class="label">최종 합격</span>' + fmt(stats.final) + '</span>' +
-      '<span class="sep"></span>' +
-      '<span class="item"><span class="label">발표 대기</span><b>' + stats.waiting + '</b></span>' +
-      '<span class="item"><span class="label">지원</span><b>' + stats.applied + '</b></span>' +
-      '<span class="brand">자비스</span>';
+  // 지나온 구간의 화살촉은 그 단계 색, 아직 결과가 없는 구간은 회색.
+  function chevron(st, i) {
+    var color = st.done > 0 ? 'var(--jsl-stage-' + i + ')' : '#dcdfe3';
+    var arm = function (cls, x) {
+      return '<path class="' + cls + '" d="M' + x + ' 3l5 5-5 5" fill="none" stroke="' + color
+        + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+    };
+    return '<span class="jsl-link"><svg width="22" height="16" viewBox="0 0 22 16" aria-hidden="true">'
+      + arm('c1', 6) + arm('c2', 12) + '</svg></span>';
+  }
 
-    var bar = document.getElementById(BAR_ID);
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = BAR_ID;
+  function build(s) {
+    var total = s.writing + s.applied;
+    var seg = function (flex, cls) {
+      return flex > 0 ? '<span class="' + cls + '" style="flex:' + flex + '"></span>' : '';
+    };
+    var html = '<div class="jsl-tn jsl-entry"><div class="jsl-bd">'
+      + '<div class="jsl-k">이번 시즌</div>'
+      + '<div class="jsl-big">' + total + '<em>건</em></div>'
+      + '<div class="jsl-comp">'
+        + seg(s.writing, 'w') + seg(s.submitted, 's') + seg(s.resolved, 'r') + '</div>'
+      + '<div class="jsl-legend">'
+        + '<span class="w">작성 중 ' + s.writing + '</span>'
+        + '<span class="s">제출 완료 ' + s.submitted + '</span>'
+        + '<span class="r">결과 확인 ' + s.resolved + '</span>'
+      + '</div></div></div>';
+
+    s.stages.forEach(function (stage, i) {
+      var st = stage.st;
+      var tail = st.wait ? ' · 대기 ' + st.wait : '';
+      html += '<div class="jsl-tn">' + chevron(st, i) + '<div class="jsl-bd">'
+        + gauge(st, i)
+        + '<div class="jsl-meta"><div class="jsl-k"><b>' + stage.name + '</b> 통과율</div>'
+        + '<div class="jsl-tf">'
+          + (st.done ? '<b>' + st.pass + '</b> 통과 / ' + st.done + ' 결과' + tail
+                     : '결과 없음' + tail)
+        + '</div></div></div></div>';
+    });
+    return html;
+  }
+
+  // 보드 바로 위에 둔다. 사이트 노드는 옮기지 않고 형제로만 끼운다.
+  function mount() {
+    var board = document.querySelector('.scheduler-resume-list-ctrl .scheduler')
+      || document.querySelector('.scheduler');
+    if (!board || !board.parentElement) return null;
+    var track = document.getElementById(TRACK_ID);
+    if (!track) {
+      track = document.createElement('div');
+      track.id = TRACK_ID;
       lastHTML = '';
     }
-    // Keep native sort buttons and Angular handlers in place. The toolbar grid
-    // puts this sibling after 제목순, or on a full-width row when space is tight.
-    var sort = document.querySelector('.resume-search-body .sort-resume-list');
-    if (sort) {
-      sort.closest('.resume-search-body').classList.add('jsl-stats-toolbar');
-      if (bar.parentElement !== sort) sort.appendChild(bar);
-    } else {
-      var body = document.querySelector('.resume-list-body');
-      if (!body) return;
-      if (bar.parentElement !== body) body.insertBefore(bar, body.firstChild);
-    }
+    if (track.nextElementSibling !== board) board.parentElement.insertBefore(track, board);
+    return track;
+  }
+
+  // 통계 바를 쓰던 흔적을 걷는다.
+  function dropOldBar() {
+    var bar = document.getElementById('jsl-stats-bar');
+    if (bar) bar.remove();
+    var body = document.querySelector('.resume-search-body.jsl-stats-toolbar');
+    if (body) body.classList.remove('jsl-stats-toolbar');
+    var style = document.getElementById('jsl-stats-style');
+    if (style) style.remove();
+  }
+
+  function render(s) {
+    dropOldBar();
+    var track = mount();
+    if (!track) return;
+    var html = build(s);
     if (html !== lastHTML) {
-      bar.innerHTML = html;
+      track.innerHTML = html;
       lastHTML = html;
     }
   }
@@ -101,10 +157,13 @@ JSL.register('list-stats', function () {
     } catch (e) { /* 예외 전파 금지 */ }
   });
 
-  // 재렌더로 바가 사라졌으면 복구 (2초 state 주기 사이의 공백 대비)
+  // 재렌더로 트랙이 사라졌으면 복구 (2초 state 주기 사이의 공백 대비)
   setInterval(function () {
     try {
-      if (lastStats && !document.getElementById(BAR_ID)) render(lastStats);
+      if (!lastStats) return;
+      var track = document.getElementById(TRACK_ID);
+      if (!track || !track.parentElement || !track.nextElementSibling
+        || !track.nextElementSibling.classList.contains('scheduler')) render(lastStats);
     } catch (e) { /* 무시 */ }
   }, 1000);
 });
