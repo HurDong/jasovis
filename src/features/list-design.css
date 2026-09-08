@@ -99,8 +99,8 @@ html.jsl-fit .scheduler .jsl-writing-column > .title { display: none !important;
 html.jsl-fit .scheduler .jsl-writing-column > .list-scroll-area { display: flex; flex-direction: column; gap: 12px; padding: 0; overflow: visible; max-height: var(--jsl-render-h) !important; }
 /* 작성 중과 제출 완료는 각각 테두리 있는 패널이다. 카드가 잘려도 테두리가 받아주므로
    스크롤 중인 상태로 읽히고, 두 구역이 12px 간격으로 확실히 갈린다. */
-html.jsl-fit .scheduler .jsl-pane { flex: 1.12 1 0; position: relative; overflow-x: hidden !important; overflow-y: auto !important; min-height: 0 !important; height: auto !important; max-height: none !important; margin: 0 !important; border: 1px solid #e2e2e2; border-top: 0; border-radius: 6px; background: white; scrollbar-width: thin; scrollbar-color: #ccc transparent; overscroll-behavior: contain; }
-html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] { flex-grow: .88; background: var(--jsl-navy-soft); border-color: var(--jsl-navy-line); }
+html.jsl-fit .scheduler .jsl-pane { flex: 1 1 0; position: relative; overflow-x: hidden !important; overflow-y: auto !important; min-height: 0 !important; height: auto !important; max-height: none !important; margin: 0 !important; border: 1px solid #e2e2e2; border-top: 0; border-radius: 6px; background: white; scrollbar-width: thin; scrollbar-color: #ccc transparent; overscroll-behavior: contain; }
+html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] { flex: 0 0 auto; max-height: min(360px, calc(var(--jsl-board-h) * .4)) !important; background: var(--jsl-navy-soft); border-color: var(--jsl-navy-line); }
 html.jsl-fit .scheduler .jsl-pane > .header { position: relative; min-height: 44px; padding: 12px 13px !important; border-bottom: 1px solid var(--jsl-line); background: white; }
 html.jsl-fit .scheduler .jsl-pane > .header::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--jsl-pane-accent, transparent); }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="0"] { --jsl-pane-accent: var(--jsl-brand); }
@@ -146,6 +146,18 @@ html.jsl-fit .scheduler .dropzone ul.itemlist.fail > li.resume-node .name { colo
 html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node:hover { border-color: var(--jsl-line-mid); box-shadow: var(--jsl-sh); }
 html.jsl-fit .scheduler li.resume-node .info, html.jsl-fit .scheduler li.resume-node .season { color: var(--jsl-dim); font-size: 11px; line-height: 1.5; }
 html.jsl-fit .scheduler li.resume-node .info .end-time .d-day { padding: 1px 5px; margin-right: 6px; border-radius: var(--jsl-r); background: var(--jsl-fill); color: var(--jsl-muted); font-weight: 700; line-height: 16px; }
+
+/* 진행률 — 우측에 떠 있던 덩어리를 카드 바닥 밑줄로 옮긴다.
+   list-progress가 tile과 seg를 각각 카드 기준 absolute로 두므로 seg만 재배치하면 된다. */
+html.jsl-fit .scheduler li.resume-node .jsl-seg { left: 0 !important; right: 0 !important; bottom: 0 !important; width: auto !important; height: 2px; gap: 1px; background: var(--jsl-fill); }
+html.jsl-fit .scheduler li.resume-node .jsl-seg > span { height: 2px; border-radius: 0; }
+html.jsl-fit .scheduler li.resume-node .jsl-tile { right: 12px !important; bottom: 11px !important; font-variant-numeric: tabular-nums; }
+/* "작성" 라벨은 카드마다 반복돼 정보가 없다. 숫자만 남긴다. */
+html.jsl-fit .scheduler li.resume-node .jsl-tile::before { display: none !important; }
+/* 라벨과 막대를 뺀 만큼 제목이 쓸 폭을 돌려준다. */
+html.jsl-fit .scheduler ul.itemlist[category_key="0"] > li.resume-node .info,
+html.jsl-fit .scheduler ul.itemlist[category_key="0"] > li.resume-node .season { padding-right: 52px; }
+html.jsl-fit .scheduler ul.itemlist[category_key="0"] > li.resume-node .info { min-height: 17px; }
 /* AI 마스터 영역은 목록에서 숨기고 작성 중을 다른 전형과 같은 높이에서 시작한다. */
 html.jsl-fit .scheduler .jsl-work-group > .ai-resume-column { display: none !important; }
 html.jsl-fit .scheduler .ai-resume-column > .title { min-height: 30px; padding: 5px !important; font-size: 12px !important; font-weight: 400; border: 0; background: transparent; color: var(--jsl-muted) !important; }
@@ -193,6 +205,7 @@ html.jsl-fit .scheduler .ai-resume-create-button img { filter: grayscale(1) brig
 /* 마감 임박은 카드 전체를 옅은 주황으로 눕힌다. 사이트가 관심 공고에 쓰는 처리 그대로다. */
 html.jsl-fit .scheduler ul.itemlist[category_key="0"] li.resume-node:has(.end-time.soon) { background: var(--jsl-tint); border-color: var(--jsl-tint-line); --jsl-stripe: var(--jsl-brand); }
 html.jsl-fit .scheduler ul.itemlist[category_key="0"] li.resume-node:has(.end-time.soon) .date { color: #a9704b; }
+html.jsl-fit .scheduler ul.itemlist[category_key="0"] li.resume-node:has(.end-time.soon) .jsl-seg { background: #f7e2d2; }
 html.jsl-fit .scheduler ul.itemlist[category_key="0"] li.resume-node .end-time.soon .d-day { background: var(--jsl-brand) !important; color: #fff !important; }
 
 /* 전형의 순서와 합불 구분. 원본 제목/건수/접기 버튼 및 드롭 영역은 유지한다. */
