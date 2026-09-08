@@ -92,15 +92,17 @@ JSL.register('list-stats', function () {
     };
 
     var html = '<div class="jsl-tn jsl-entry"><div class="jsl-bd">'
-      + '<div class="jsl-k">전체</div>'
-      + '<div class="jsl-big">' + total + '<em>건</em></div>'
-      + '<div class="jsl-comp">'
-        + seg(s.writing, 'w') + seg(s.submitted, 's') + seg(s.resolved, 'r') + '</div>'
-      + '<div class="jsl-legend">'
-        + '<span class="w">작성 중 ' + s.writing + '</span>'
-        + '<span class="s">제출 완료 ' + s.submitted + '</span>'
-        + '<span class="r">결과 확인 ' + s.resolved + '</span>'
-      + '</div></div>' + next(0) + '</div>';
+      + '<div class="jsl-sum"><div class="jsl-k">전체</div>'
+        + '<div class="jsl-big">' + total + '<em>건</em></div></div>'
+      + '<div class="jsl-mix">'
+        + '<div class="jsl-comp">'
+          + seg(s.writing, 'w') + seg(s.submitted, 's') + seg(s.resolved, 'r') + '</div>'
+        + '<div class="jsl-legend">'
+          + '<span class="w">작성 중 ' + s.writing + '</span>'
+          + '<span class="s">제출 완료 ' + s.submitted + '</span>'
+          + '<span class="r">결과 확인 ' + s.resolved + '</span>'
+        + '</div></div>'
+      + '</div>' + next(0) + '</div>';
 
     s.stages.forEach(function (stage, i) {
       var st = stage.st;
