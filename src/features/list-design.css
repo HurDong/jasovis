@@ -288,6 +288,17 @@ html.jsl-fit .scheduler .jsl-pane > .dropzone > ul.itemlist:not(.header-itemlist
    한 줄 분량의 여유를 둬서 그룹 끝에 떨어뜨릴 자리를 만든다. */
 html.jsl-fit .scheduler .jsl-stage .dropzone > ul.itemlist:not(.header-itemlist) { padding-bottom: 26px; }
 
+/* 접기 버튼에 반응을 준다. 머리글 어디를 눌러도 접히므로 머리글 전체가 커서 대상이고,
+   화살표는 눌리는 알약처럼 보이게 한다.
+   아이콘 자체에는 전환을 걸지 않는다 — ngAnimate가 그 전환이 끝나기를 기다리다
+   ng-hide를 못 붙이고 멈춘다. 아래쪽 ng-hide-add 처리와 같은 사고의 원인이다. */
+html.jsl-fit .scheduler .list-container > .header { cursor: pointer; }
+html.jsl-fit .scheduler .header .arrow { box-sizing: border-box; width: 22px; height: 22px; display: grid; place-items: center;
+  border-radius: var(--jsl-r); cursor: pointer; transition: background-color .12s ease, color .12s ease, transform .1s ease; }
+html.jsl-fit .scheduler .header .arrow > .material-icons { grid-area: 1 / 1; }
+html.jsl-fit .scheduler .list-container > .header:hover .arrow { background: rgba(0,0,0,.06); color: var(--jsl-ink); }
+html.jsl-fit .scheduler .header .arrow:active { background: rgba(0,0,0,.13); transform: scale(.86); }
+
 /* 접기/펼치기는 즉시 반영한다. native 200ms 높이 보간을 기다리지 않는다. */
 html.jsl-fit .scheduler .dropzone { transition: none !important; animation: none !important; }
 html.jsl-fit .scheduler .dropzone.ng-hide-add:not(.ng-hide-remove) { display: none !important; }
