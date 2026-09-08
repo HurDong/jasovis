@@ -85,8 +85,16 @@ JSL.register('list-stats', function () {
 
   function build(s) {
     var total = s.writing + s.applied;
+    // 막대 조각과 라벨이 같은 비율을 쓰면 라벨이 자기 조각 아래에 선다.
     var seg = function (flex, cls) {
       return flex > 0 ? '<span class="' + cls + '" style="flex:' + flex + '"></span>' : '';
+    };
+    // 조각이 좁아지면 라벨만 줄고 숫자는 남는다.
+    var tag = function (flex, cls, text) {
+      return flex > 0
+        ? '<span class="' + cls + '" style="flex:' + flex + '" title="' + text + ' ' + flex + '">'
+          + '<i>' + text + '</i><b>' + flex + '</b></span>'
+        : '';
     };
     // 화살촉은 다음 단계를 가리키므로 앞 칸의 꼬리에 붙인다. 남는 폭 한가운데에 놓인다.
     var next = function (i) {
@@ -100,9 +108,9 @@ JSL.register('list-stats', function () {
         + '<div class="jsl-comp">'
           + seg(s.writing, 'w') + seg(s.submitted, 's') + seg(s.resolved, 'r') + '</div>'
         + '<div class="jsl-legend">'
-          + '<span class="w">작성 중 ' + s.writing + '</span>'
-          + '<span class="s">제출 완료 ' + s.submitted + '</span>'
-          + '<span class="r">결과 확인 ' + s.resolved + '</span>'
+          + tag(s.writing, 'w', '작성 중')
+          + tag(s.submitted, 's', '제출 완료')
+          + tag(s.resolved, 'r', '결과 확인')
         + '</div></div>'
       + '</div>' + next(0) + '</div>';
 

@@ -82,8 +82,12 @@ html.jsl-fit .resume-order-by li:hover { color: var(--jsl-ink); }
 #jsl-track .jsl-comp .w { background: var(--jsl-brand); }
 #jsl-track .jsl-comp .s { background: var(--jsl-navy); }
 #jsl-track .jsl-comp .r { background: #c9cdd4; }
-#jsl-track .jsl-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 9px; font-size: 11px; color: var(--jsl-dim); }
-#jsl-track .jsl-legend span::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 2px; margin-right: 4px; vertical-align: 1px; }
+/* 막대와 같은 비율·같은 간격이라 라벨이 자기 조각 아래에 선다. */
+#jsl-track .jsl-legend { display: flex; gap: 3px; margin-top: 9px; font-size: 11px; color: var(--jsl-dim); }
+#jsl-track .jsl-legend span { display: flex; align-items: baseline; gap: 4px; min-width: 42px; white-space: nowrap; }
+#jsl-track .jsl-legend i { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-style: normal; }
+#jsl-track .jsl-legend b { flex: 0 0 auto; font-weight: 700; color: var(--jsl-muted); font-variant-numeric: tabular-nums; }
+#jsl-track .jsl-legend span::before { content: ""; flex: 0 0 auto; display: block; width: 6px; height: 6px; border-radius: 2px; align-self: center; }
 #jsl-track .jsl-legend .w::before { background: var(--jsl-brand); }
 #jsl-track .jsl-legend .s::before { background: var(--jsl-navy); }
 #jsl-track .jsl-legend .r::before { background: #c9cdd4; }
