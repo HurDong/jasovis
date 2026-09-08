@@ -67,10 +67,10 @@ html.jsl-fit .resume-order-by li:hover { color: var(--jsl-ink); }
 #jsl-track .jsl-link { flex: 0 0 auto; width: 30px; margin-left: auto; margin-right: auto; display: flex; align-items: center; justify-content: center; }
 #jsl-track .jsl-bd { display: flex; align-items: center; gap: 13px; min-width: 0; padding-left: 14px; }
 /* 숫자와 구성 막대를 나란히 둔다. 세로로 쌓으면 넓은 칸 왼쪽 끝에 몰려 보인다. */
-#jsl-track .jsl-entry .jsl-bd { display: flex; align-items: center; gap: 32px; flex: 0 0 auto; padding-right: 28px; }
+#jsl-track .jsl-entry .jsl-bd { display: flex; align-items: center; gap: 60px; flex: 0 0 auto; padding-right: 28px; }
 #jsl-track .jsl-sum { flex: 0 0 auto; }
 /* 큰 숫자의 무게중심이 아래쪽이라 막대를 조금 내려야 나란해 보인다. */
-#jsl-track .jsl-mix { flex: 0 0 auto; width: 470px; margin-top: 9px; }
+#jsl-track .jsl-mix { flex: 0 0 auto; width: 470px; margin-top: 20px; }
 #jsl-track .jsl-k { font-size: 11px; color: var(--jsl-dim); }
 #jsl-track .jsl-k b { font-weight: 600; color: var(--jsl-muted); }
 #jsl-track .jsl-big { font-size: 26px; font-weight: 700; letter-spacing: -.02em; color: var(--jsl-ink-strong); font-variant-numeric: tabular-nums; line-height: 1.25; }
