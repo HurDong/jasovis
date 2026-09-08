@@ -36,6 +36,14 @@ html.jsl-fit {
   --jsl-stage-2: #f5802f;
   --jsl-stage-3: #ff6813;
 }
+/* 채팅을 열면 보드와 채팅 패널 사이에 32px 흰 띠가 생긴다. 사이트 컨테이너의 좌우
+   여백인데, 왼쪽은 페이지 여백으로 읽히지만 오른쪽은 두 화면 사이의 틈으로 보인다.
+   채팅 패널이 자기 왼쪽 1px 경계선을 갖고 있으므로 오른쪽 여백만 걷어 맞붙인다.
+   검색 영역은 margin -32px / padding 32px로 그 여백을 상쇄하고 있으므로 같이 푼다.
+   안 그러면 32px 넘쳐 가로 스크롤바가 생기고 그 높이 때문에 세로 스크롤바까지 뜬다. */
+html.jsl-fit .main-tab.open-chat .resume-list-tmpl-container { padding-right: 0; }
+html.jsl-fit .main-tab.open-chat .resume-search-section { margin-right: 0; padding-right: 0; }
+
 html.jsl-fit .scheduler-resume-list-ctrl { background: var(--jsl-canvas); }
 html.jsl-fit .resume-search-section { height: auto !important; min-height: 0 !important; padding-top: 15px; margin-bottom: 10px; background: var(--jsl-canvas); }
 html.jsl-fit .resume-search-container { position: relative; height: auto !important; border: 0 !important; box-shadow: none !important; background: transparent !important; }
