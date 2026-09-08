@@ -63,21 +63,23 @@ html.jsl-fit .resume-order-by li:hover { color: var(--jsl-ink); }
    보드와 같은 격자에 정렬해 각 단계 수치가 그 아래 카드 더미 위에 선다. */
 #jsl-track { display: grid; grid-template-columns: var(--jsl-cols, 1fr); align-items: center; padding: 2px 0 12px; }
 #jsl-track .jsl-tn { display: flex; align-items: center; min-width: 0; }
-#jsl-track .jsl-link { flex: 0 0 auto; width: 30px; margin-left: -15px; display: flex; align-items: center; justify-content: center; }
+/* 앞 칸 글자가 끝난 자리와 다음 게이지 사이, 남는 폭 한가운데에 놓는다. */
+#jsl-track .jsl-link { flex: 0 0 auto; width: 30px; margin-left: auto; margin-right: auto; display: flex; align-items: center; justify-content: center; }
 #jsl-track .jsl-bd { display: flex; align-items: center; gap: 13px; min-width: 0; padding-left: 13px; }
-#jsl-track .jsl-entry .jsl-bd { display: block; padding-left: 0; }
+#jsl-track .jsl-entry .jsl-bd { display: block; flex: 1 1 auto; min-width: 0; padding-left: 0; }
+#jsl-track .jsl-entry .jsl-link { margin-left: 12px; margin-right: 0; }
 #jsl-track .jsl-k { font-size: 11px; color: var(--jsl-dim); }
 #jsl-track .jsl-k b { font-weight: 600; color: var(--jsl-muted); }
 #jsl-track .jsl-big { font-size: 24px; font-weight: 700; letter-spacing: -.02em; color: var(--jsl-ink-strong); font-variant-numeric: tabular-nums; line-height: 1.25; }
 #jsl-track .jsl-big em { font-style: normal; font-size: 11px; font-weight: 500; color: var(--jsl-dim); margin-left: 4px; }
 #jsl-track .jsl-tf { margin-top: 2px; font-size: 12px; color: var(--jsl-muted); font-variant-numeric: tabular-nums; }
 #jsl-track .jsl-tf b { font-weight: 700; color: var(--jsl-ink-strong); }
-#jsl-track .jsl-comp { display: flex; gap: 3px; height: 8px; margin-top: 9px; margin-right: 22px; }
+#jsl-track .jsl-comp { display: flex; gap: 3px; height: 8px; margin-top: 9px; margin-right: 46px; }
 #jsl-track .jsl-comp span { border-radius: 4px; }
 #jsl-track .jsl-comp .w { background: var(--jsl-brand); }
 #jsl-track .jsl-comp .s { background: var(--jsl-navy); }
 #jsl-track .jsl-comp .r { background: #c9cdd4; }
-#jsl-track .jsl-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 7px; font-size: 11px; color: var(--jsl-dim); }
+#jsl-track .jsl-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 7px; margin-right: 46px; font-size: 11px; color: var(--jsl-dim); }
 #jsl-track .jsl-legend span::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 2px; margin-right: 4px; vertical-align: 1px; }
 #jsl-track .jsl-legend .w::before { background: var(--jsl-brand); }
 #jsl-track .jsl-legend .s::before { background: var(--jsl-navy); }

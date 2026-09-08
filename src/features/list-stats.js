@@ -86,8 +86,13 @@ JSL.register('list-stats', function () {
     var seg = function (flex, cls) {
       return flex > 0 ? '<span class="' + cls + '" style="flex:' + flex + '"></span>' : '';
     };
+    // 화살촉은 다음 단계를 가리키므로 앞 칸의 꼬리에 붙인다. 남는 폭 한가운데에 놓인다.
+    var next = function (i) {
+      return i < s.stages.length ? chevron(s.stages[i].st, i) : '';
+    };
+
     var html = '<div class="jsl-tn jsl-entry"><div class="jsl-bd">'
-      + '<div class="jsl-k">이번 시즌</div>'
+      + '<div class="jsl-k">전체</div>'
       + '<div class="jsl-big">' + total + '<em>건</em></div>'
       + '<div class="jsl-comp">'
         + seg(s.writing, 'w') + seg(s.submitted, 's') + seg(s.resolved, 'r') + '</div>'
@@ -95,18 +100,18 @@ JSL.register('list-stats', function () {
         + '<span class="w">작성 중 ' + s.writing + '</span>'
         + '<span class="s">제출 완료 ' + s.submitted + '</span>'
         + '<span class="r">결과 확인 ' + s.resolved + '</span>'
-      + '</div></div></div>';
+      + '</div></div>' + next(0) + '</div>';
 
     s.stages.forEach(function (stage, i) {
       var st = stage.st;
       var tail = st.wait ? ' · 대기 ' + st.wait : '';
-      html += '<div class="jsl-tn">' + chevron(st, i) + '<div class="jsl-bd">'
+      html += '<div class="jsl-tn"><div class="jsl-bd">'
         + gauge(st, i)
         + '<div class="jsl-meta"><div class="jsl-k"><b>' + stage.name + '</b> 통과율</div>'
         + '<div class="jsl-tf">'
           + (st.done ? '<b>' + st.pass + '</b> 통과 / ' + st.done + ' 결과' + tail
                      : '결과 없음' + tail)
-        + '</div></div></div></div>';
+        + '</div></div></div>' + next(i + 1) + '</div>';
     });
     return html;
   }
