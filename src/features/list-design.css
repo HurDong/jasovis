@@ -166,8 +166,8 @@ html.jsl-fit #jsl-watch-section { flex: 0 1 auto; max-height: min(80px,calc(var(
 html.jsl-fit .scheduler .ui-sortable-helper { z-index: 1000 !important; pointer-events: none; }
 /* 끌고 있는 카드가 어디로 갈지 자리로 알려준다. 원본 placeholder는 삽입 지점에
    그대로 들어오므로, 그것을 빈 슬롯처럼 보이게 만들고 문구를 얹는다. */
-html.jsl-fit .scheduler .sortable-placeholder { box-sizing: border-box; grid-column: 1 / -1; position: relative !important; display: flex !important; align-items: center; justify-content: center; visibility: visible !important; width: auto !important; top: auto !important; left: auto !important; margin: 0 !important; min-height: 46px; border: 2px dashed var(--jsl-brand) !important; background: var(--jsl-tint) !important; border-radius: var(--jsl-r); }
-html.jsl-fit .scheduler .sortable-placeholder::after { content: "이 줄에 놓기"; color: var(--jsl-accent); font-size: 11px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
+html.jsl-fit .scheduler .sortable-placeholder { box-sizing: border-box; position: relative !important; display: flex !important; align-items: center; justify-content: center; visibility: visible !important; width: auto !important; top: auto !important; left: auto !important; margin: 0 !important; min-height: var(--jsl-drag-h,70px); border: 2px dashed var(--jsl-brand) !important; background: var(--jsl-tint) !important; border-radius: var(--jsl-r); }
+html.jsl-fit .scheduler .sortable-placeholder::after { content: "여기에 놓기"; color: var(--jsl-accent); font-size: 11px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; }
 /* 목적지 칸 전체도 옅게 물들여 어느 구역으로 가는지 먼저 보이게 한다. */
 html.jsl-fit .scheduler .dropzone:has(.sortable-placeholder) { background: #fffaf6; }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .dropzone:has(.sortable-placeholder) { background: #f6f8fb; }
