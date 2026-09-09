@@ -49,10 +49,13 @@ html.jsl-fit .main-tab.open-chat .resume-search-section { margin-right: 0; paddi
    다만 위 검색줄은 사이트의 margin:0 -32px 상쇄로 화면 끝까지 흰색인데 보드는 32px 안쪽에서
    멈춰, 툴바 아래로 ㄱ자 단차가 생긴다. 게다가 왼쪽 끝은 '작성 중' 패널 테두리가 흰색을
    끊어주지만 마지막 전형 열은 오른쪽 테두리가 없어 흰 바닥이 회색으로 툭 끊긴다.
-   열 위치는 그대로 두고 그 padding 자리만 흰색으로 덮는다. 32px은 좌우 대칭 여백으로 남아
-   카드가 화면 끝에 붙지 않는다. */
+   열 위치는 그대로 두고 그 padding 자리를 보드 지면과 같은 색으로 덮는다. 32px은 좌우 대칭
+   여백으로 남아 카드가 화면 끝에 붙지 않는다.
+   지면은 흰색이 아니라 #fafafa다 (2026-09-10) — 전형 열이 흰 카드가 된 뒤로 흰 바닥 위의
+   흰 카드가 되어 #eee 테두리만으로는 경계가 안 읽혔다. 지면을 한 톤 내려 카드를 띄운다.
+   가로 전체가 같은 색이라 처음 문제였던 'ㄱ자 단차'는 그대로 없다. */
 html.jsl-fit .resume-list-tmpl-container,
-html.jsl-fit .scheduler-resume-list-ctrl { background: var(--jsl-canvas); }
+html.jsl-fit .scheduler-resume-list-ctrl { background: var(--jsl-soft); }
 html.jsl-fit .resume-search-section { height: auto !important; min-height: 0 !important; padding-top: 15px; margin-bottom: 10px; background: var(--jsl-canvas); }
 html.jsl-fit .resume-search-container { position: relative; height: auto !important; border: 0 !important; box-shadow: none !important; background: transparent !important; }
 html.jsl-fit .resume-search-header { position: absolute; right: 0; top: 0; width: auto !important; height: 32px !important; padding: 0 !important; background: transparent !important; color: var(--jsl-muted) !important; z-index: 5; }
@@ -142,7 +145,7 @@ html.jsl-fit .scheduler > .jsl-work-group { display: flex !important; flex-direc
 html.jsl-fit .scheduler .scheduler-column { display: flex !important; flex-direction: column; float: none !important; width: auto !important; min-width: 0; min-height: 0; height: 100% !important; margin: 0 !important; padding: 0 !important; border: 0; background: transparent; }
 /* overflow:hidden은 걸지 않는다 — 드래그 중인 카드가 열 경계에서 잘린다.
    3px 단계 띠는 자기 모서리를 직접 둥글려 카드 라운드를 따라간다. */
-html.jsl-fit .scheduler .scheduler-column.jsl-stage { border: 1px solid var(--jsl-line); border-radius: 7px; background: var(--jsl-canvas); }
+html.jsl-fit .scheduler .scheduler-column.jsl-stage { border: 1px solid #e2e2e2; border-radius: 7px; background: var(--jsl-canvas); }
 html.jsl-fit .scheduler .scheduler-column.jsl-stage > .title { border-radius: 6px 6px 0 0; }
 html.jsl-fit .scheduler .scheduler-column > .title { box-sizing: border-box; position: relative; flex: 0 0 auto; min-height: 44px; margin: 0 !important; padding: 0 14px !important; text-align: left !important; font-size: 13px !important; font-weight: 600; color: var(--jsl-ink-strong) !important; border-bottom: 1px solid var(--jsl-line); background: white; }
 html.jsl-fit .scheduler .scheduler-column > .list-scroll-area { flex: 1 1 auto; min-height: 0; height: auto !important; max-height: var(--jsl-board-h) !important; overflow-x: hidden; overflow-y: auto; padding: 10px 12px 22px; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #ccc transparent; }
