@@ -210,6 +210,26 @@ html.jsl-fit .scheduler .sortable-placeholder::after { content: "여기에 놓�
 /* 목적지 칸 전체도 옅게 물들여 어느 구역으로 가는지 먼저 보이게 한다. */
 html.jsl-fit .scheduler .dropzone:has(.sortable-placeholder) { background: #fffaf6; }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .dropzone:has(.sortable-placeholder) { background: #f6f8fb; }
+/* "아래에 카드가 더 있어요" — 작성 중·제출 완료 패널이 안쪽 스크롤로 잘릴 때만.
+   패널 바닥 가운데 떠 있는 작은 알약. 누르면 dropzone을 한 화면 아래로 내린다.
+   스크롤이 맨 아래면 list-layout이 hidden을 걸어 사라진다. */
+html.jsl-fit .scheduler .jsl-pane > .jsl-morehint {
+  position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 4;
+  display: inline-flex; align-items: center; gap: 5px; margin: 0; padding: 5px 11px 5px 12px;
+  border: 1px solid var(--jsl-tint-line); border-radius: 999px; background: #fff;
+  box-shadow: 0 3px 10px rgba(0,0,0,.13); color: var(--jsl-accent);
+  font-family: inherit; font-size: 11px; font-weight: 700; line-height: 1; letter-spacing: -.01em; cursor: pointer;
+}
+html.jsl-fit .scheduler .jsl-pane > .jsl-morehint:hover { background: var(--jsl-tint); }
+html.jsl-fit .scheduler .jsl-pane > .jsl-morehint:focus-visible { outline: 2px solid var(--jsl-brand); outline-offset: 2px; }
+html.jsl-fit .scheduler .jsl-pane > .jsl-morehint[hidden] { display: none; }
+html.jsl-fit .scheduler .jsl-pane > .jsl-morehint svg { width: 12px; height: 12px; flex: none; }
+html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .jsl-morehint { color: var(--jsl-navy); border-color: var(--jsl-navy-line); }
+html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .jsl-morehint:hover { background: var(--jsl-navy-soft); }
+@media (prefers-reduced-motion: no-preference) {
+  html.jsl-fit .scheduler .jsl-pane > .jsl-morehint { transition: background-color .12s ease; }
+}
+
 .jsl-render-anchor { position: fixed; width: 0; height: 0; overflow: hidden; pointer-events: none; visibility: hidden; }
 .jsl-render-anchor > .list-scroll-area { width: 0 !important; height: 0 !important; max-height: 999999px !important; }
 html.jsl-fit .scheduler [tabindex]:focus-visible, html.jsl-fit .resume-search-field:focus-visible { outline: 2px solid var(--jsl-brand); outline-offset: -2px; }
@@ -253,6 +273,18 @@ html.jsl-fit .scheduler ul.itemlist[category_key="0"] li.resume-node:has(.end-ti
 html.jsl-fit .scheduler ul.itemlist[category_key="0"] li.resume-node:has(.end-time.soon) .date { color: #a9704b; }
 html.jsl-fit .scheduler ul.itemlist[category_key="0"] li.resume-node:has(.end-time.soon) .jsl-seg { background: #f7e2d2; }
 html.jsl-fit .scheduler ul.itemlist[category_key="0"] li.resume-node .end-time.soon .d-day { background: var(--jsl-brand) !important; color: #fff !important; }
+
+/* 마감 임박 작성 중 자소서(list-progress가 data-jsl-urgent를 켠다). 판정 기준은
+   사이트의 .soon(기준이 다름)이 아니라 "마감 내일 23:59 이내"다. 작성량과 무관하다
+   (사용자 결정: 다 쓴 카드도 똑같이 칠한다). 칸만 칠하고 배지·요약줄은 두지 않는다.
+   좌측 띠를 4px로 키운다. 기존 카드 규칙보다 확실히 이기도록 같은 경로 접두사로 건다. */
+html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node[data-jsl-urgent] { background: var(--jsl-tint); border-color: var(--jsl-tint-line); --jsl-stripe: var(--jsl-brand); }
+html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node[data-jsl-urgent]::before { width: 4px; }
+html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node[data-jsl-urgent] .info .end-time .date { color: #a9704b; }
+html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node[data-jsl-urgent] .jsl-seg { background: #f7e2d2; }
+html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node[data-jsl-urgent] .jsl-num,
+html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node[data-jsl-urgent] .jsl-den { color: var(--jsl-accent); }
+html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node[data-jsl-urgent] .info .end-time .d-day { background: var(--jsl-brand) !important; color: #fff !important; }
 
 /* 전형의 순서와 합불 구분. 원본 제목/건수/접기 버튼 및 드롭 영역은 유지한다. */
 html.jsl-fit .scheduler .jsl-stage > .title { display: flex; align-items: center; gap: 8px; }

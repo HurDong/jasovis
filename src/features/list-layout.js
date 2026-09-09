@@ -178,6 +178,64 @@ JSL.register('list-layout', function () {
   document.addEventListener('touchmove', updateDragBounds, { capture: true, passive: true });
   window.addEventListener('blur', restoreDrag);
 
+  // ── "아래에 카드가 더 있어요" 힌트 (SPEC.md "패널 아래 스크롤 힌트" 절) ──────────
+  // 작성 중·제출 완료 패널이 안쪽 스크롤로 카드를 잘라 먹을 때만, 패널 바닥 가운데에
+  // "N개 더" 알약을 띄운다. 누르면 그 dropzone을 한 화면 아래로 내린다.
+  // 스크롤이 맨 아래에 닿거나 애초에 안 잘렸으면 감춘다. 표시는 list-design.css가 맡는다.
+  var HINT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+
+  function hintFor(pane) {
+    var hint = pane.querySelector(':scope > .jsl-morehint');
+    if (!hint) {
+      hint = document.createElement('button');
+      hint.type = 'button';
+      hint.className = 'jsl-morehint';
+      hint.hidden = true;
+      hint.addEventListener('click', function () {
+        var dz = pane.querySelector(':scope > .dropzone');
+        if (dz) dz.scrollBy({ top: Math.max(120, Math.round(dz.clientHeight * 0.85)), behavior: 'smooth' });
+      });
+      pane.appendChild(hint);
+    }
+    return hint;
+  }
+
+  function updateMoreHints() {
+    if (!applied) return;
+    var panes = document.querySelectorAll(
+      '.scheduler .jsl-pane[data-jsl-category="0"], .scheduler .jsl-pane[data-jsl-category="1"]'
+    );
+    for (var i = 0; i < panes.length; i++) {
+      var pane = panes[i];
+      var hint = hintFor(pane);
+      var dz = pane.querySelector(':scope > .dropzone');
+      if (dragging || !dz || !dz.clientHeight || dz.classList.contains('ng-hide')) { hint.hidden = true; continue; }
+      if (dz.scrollHeight - dz.scrollTop - dz.clientHeight <= 8) { hint.hidden = true; continue; }
+      var fold = dz.getBoundingClientRect().bottom;
+      var lis = dz.querySelectorAll('li.resume-node[resume_node_id]');
+      var clipped = 0;
+      for (var j = 0; j < lis.length; j++) {
+        if (lis[j].getBoundingClientRect().top >= fold - 8) clipped++;
+      }
+      if (clipped <= 0) { hint.hidden = true; continue; }
+      var label = clipped + '개 더';
+      if (hint.getAttribute('data-jsl-n') !== String(clipped)) {
+        hint.setAttribute('data-jsl-n', String(clipped));
+        hint.innerHTML = HINT_ICON + label;
+        hint.setAttribute('aria-label', '아래로 ' + label + ' 보기');
+      }
+      hint.hidden = false;
+    }
+  }
+
+  var hintRaf = 0;
+  document.addEventListener('scroll', function (event) {
+    if (!applied || hintRaf) return;
+    var t = event.target;
+    if (!(t && t.nodeType === 1 && t.classList && t.classList.contains('dropzone'))) return;
+    hintRaf = requestAnimationFrame(function () { hintRaf = 0; updateMoreHints(); });
+  }, true);
+
   // 보드 위(글로벌 헤더·검색창·정렬줄·자비스 통계바)를 뺀 나머지가 보드 몫이다.
   // 바깥 스크롤러는 window가 아니라 .resume-list-tmpl-container다 (실측: document는 안 늘어남).
   function outerEl() {
@@ -267,12 +325,15 @@ JSL.register('list-layout', function () {
         }
       }
     }
+
+    try { updateMoreHints(); } catch (e) { /* 힌트는 부가 기능 — 실패해도 보드 배치는 유지 */ }
   }
 
   function release() {
     if (!applied) return;
     applied = false;
     restoreDrag();
+    document.querySelectorAll('.scheduler .jsl-morehint').forEach(function (n) { n.remove(); });
     cleanup();
     document.documentElement.classList.remove('jsl-fit', 'jsl-compact', 'jsl-narrow');
     document.documentElement.style.removeProperty('--jsl-board-h');
@@ -319,12 +380,12 @@ JSL.register('list-layout', function () {
 
   function affectsLayout(record) {
     var target = record.target.nodeType === 1 ? record.target : record.target.parentElement;
-    if (target && target.closest('.jsl-tile, .jsl-seg')) return false;
+    if (target && target.closest('.jsl-tile, .jsl-seg, .jsl-morehint')) return false;
     var relevant = '.scheduler, .resume-search-section, #jsl-stats-bar, #jsl-watch-section';
     if (record.type === 'childList') {
       var changed = Array.from(record.addedNodes).concat(Array.from(record.removedNodes));
       if (changed.length && changed.every(function (node) {
-        return node.nodeType === 1 && node.matches('.jsl-tile, .jsl-seg');
+        return node.nodeType === 1 && node.matches('.jsl-tile, .jsl-seg, .jsl-morehint');
       })) return false;
       if (changed.some(function (node) { return node.nodeType === 1 && (node.matches(relevant) || node.querySelector(relevant)); })) return true;
     }

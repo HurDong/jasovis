@@ -211,7 +211,8 @@ keydown은 capture 단계(`addEventListener(..., true)`)로 document에 등록
 - 카드 DOM: `li.resume-node[resume_node_id="<id>"]`, 내부 `.name`, `.d-day`, `.date`.
   카드 이동은 드래그(`div.dropzone`). **카드 리스트는 수시로 재렌더되어 주입 노드가 사라진다**
   → 오버레이는 onState 주기 + MutationObserver로 재적용할 것.
-- 목록 state 스키마: `{ page:'list', resumes:[{id, category, employmentId, employmentCompanyId, sample, qnaTotal, qnaFilled}] }`
+- 목록 state 스키마: `{ page:'list', resumes:[{id, category, employmentId, employmentCompanyId, sample, qnaTotal, qnaFilled, endTime}] }`
+  (`endTime` = `resume.end_time` 문자열 원본, 마감 임박 경고용. 없으면 null)
   (편집 페이지 state와 `page` 필드로 구분)
 
 ### 카드 우클릭 빠른 작업 (`list-menu.js`) — 2026-09-07 수정
@@ -286,6 +287,23 @@ keydown은 capture 단계(`addEventListener(..., true)`)로 document에 등록
 - 미작성은 무채색, 작성한 숫자·막대는 주황색이다. 모든 문항을 채워도 제출 완료로 간주하지 않으며
   초록색이나 '완료' 문구로 표시하지 않는다. 작성 중에서 이동한 카드는 기존 unpaint 경로로 정리한다.
 - 아래 갱신 경로는 유지한다. 과거 좌측 타일의 측정 관련 기록은 해당 날짜의 검증 이력이다.
+
+#### 마감 임박 경고 (list-progress) — 2026-09-09
+
+같은 모듈이 category 0 카드를 이미 순회하므로 경고도 여기서 붙인다. 별도 옵저버·조회를 만들지 않는다.
+
+- 대상 = 작성 중 + 문항이 1개 이상 + 마감이 **오늘~내일 23:59(로컬)** 이내.
+  **작성량과 무관하다** — 처음엔 미완성만 칠했으나, 다 쓴 임박 카드도 눈에 띄어야 한다는
+  피드백으로 조건에서 뺐다(사용자 결정: "똑같이 칠하기"). 다 쓴 카드는 제출만 하면 되지만
+  마감이 코앞이면 그 자체로 급하다. 마감이 이미 지났는데 작성 중인 초안도 경계보다 앞이라 포함된다.
+- 마감 시각은 목록 state의 `endTime`(`list-main.js`가 `resume.end_time`을 문자열 그대로 전달)로 본다.
+  판정은 격리 월드에서 하고 MAIN은 값만 넘긴다. `endTime`이 없거나 파싱 불가면 경고하지 않는다.
+- 표시는 CSS가 맡는다. list-progress는 해당 `li`에 `data-jsl-urgent` 속성만 켜고 끈다.
+  onState(2초) 주기에 매번 재평가하므로 시간이 지나 임박해지는 카드도 곧 반영된다.
+- **칸(카드)만 칠한다** — 헤더 배지·상단 요약줄·카드 안 경고 줄은 두지 않는다(사용자 결정).
+  옅은 주황 배경 `--jsl-tint` + 좌측 띠를 3→4px로 키움 + D-day 칩 주황 반전 + 진행 막대 트랙을
+  임박 색으로. 사이트의 `.end-time.soon`(기준이 다름)과 무관하게 `data-jsl-urgent`로만 구동한다.
+- 깜빡임 등 모션은 쓰지 않는다.
 
 #### 갱신 경로 — 폴링 금지, 변화 시점에 당겨온다 (2026-07-26 실페이지 측정)
 
@@ -735,8 +753,24 @@ ChatGPT 등에서 초안 **본문만** 복사해 온 뒤, 대시보드의 그 �
   분수·워터마크의 명도를 올려 읽히게 한다.
 - 전형 열의 빈 안내는 점선 대신 실선 + `#fafafa` 채움이다. 사이트에 점선 테두리가 없다.
 
-미반영 — 여정 트랙(반원 게이지·화살촉 커넥터), 툴바 재배치, "아래에 더 있어요" 안내,
-빈 열 선 일러스트는 주입 노드가 필요해 CSS만으로 되지 않는다. 시안은 확정됐고 구현은 다음 단계다.
+미반영 — 여정 트랙(반원 게이지·화살촉 커넥터), 툴바 재배치, 빈 열 선 일러스트는 주입 노드가
+필요해 CSS만으로 되지 않는다. 여정 트랙은 이후 list-stats로 구현됐다. "아래에 더 있어요" 힌트는
+아래 절 참조.
+
+### 패널 아래 스크롤 힌트 (list-layout) — 2026-09-09
+
+작성 중 / 제출 완료 패널은 안쪽에서 스크롤되는데, 바닥에 카드가 잘려 있어도 표시가 없어
+"이게 다인가?" 싶다. `list-layout`이 패널을 이미 관리하므로 힌트도 여기서 붙인다.
+
+- 대상: `.jsl-pane[data-jsl-category="0"]`, `[data-jsl-category="1"]`. 미제출(10)은 제외.
+- 각 패널 바닥 가운데에 `button.jsl-morehint` "N개 더" 알약을 띄운다. 흰 바탕 + 주황 글씨/테두리
+  (제출 완료는 네이비), 아래꺾쇠 아이콘. 누르면 그 `> .dropzone`을 한 화면(≈85%) 아래로
+  부드럽게 스크롤한다. 사이트 카드/DOM/이벤트는 건드리지 않는다.
+- 표시 조건: dropzone에 세로 스크롤 여유가 8px 넘게 남고, fold 아래로 완전히 넘어간
+  `li.resume-node`가 1개 이상일 때만. 맨 아래에 닿거나 안 잘렸으면 `hidden`.
+- 드래그 중에는 감춘다. dropzone `scroll`에 rAF 스로틀로 갱신하고, `apply()` 끝에서도 한 번 부른다.
+- N이 바뀔 때만 innerHTML을 다시 쓴다(`data-jsl-n` 가드). `.jsl-morehint`의 childList/attr 변경은
+  레이아웃 옵저버가 무시한다(`.jsl-tile`·`.jsl-seg`와 같은 처리). SPA 이탈·release 시 노드를 제거한다.
 
 ### 채팅 패널을 열었을 때의 오른쪽 여백 (2026-09-09)
 

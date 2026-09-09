@@ -4,12 +4,33 @@
 // 모든 문항을 채워도 제출 완료가 아니므로 완료 초록이나 '완료' 문구를 쓰지 않는다.
 // 주의: 사이트가 카드 리스트를 수시로 재렌더해 주입 노드가 날아간다(실페이지 검증됨)
 //       → onState(2초 주기) + MutationObserver로 재적용한다.
+//
+// 겸해서 '마감 임박' 경고도 여기서 붙인다(SPEC.md "마감 임박 경고" 절).
+// 대상 카드 = 작성 중 + 문항이 있고 + 마감이 '내일 23:59' 이내. 작성량과 무관하다
+// (사용자 결정: 다 쓴 카드도 똑같이 칠한다 — 어차피 마감이 코앞이면 눈에 띄어야 한다).
+// 표시는 CSS가 맡고, 여기서는 li에 data-jsl-urgent 속성만 켠다/끈다.
 JSL.register('list-progress', function () {
   'use strict';
 
   var MAX_SEG = 20;  // 세그먼트가 실오라기가 되지 않는 상한. 넘으면 비율로 근사한다.
 
-  var progressById = {}; // { resumeId: {filled, total} }
+  var progressById = {}; // { resumeId: {filled, total, endTime} }
+
+  // 마감이 오늘~내일 23:59(로컬) 안이면 임박으로 본다. 이미 지난 마감도 그 경계보다
+  // 앞이므로 포함된다 — 마감이 지났는데 아직 작성 중인 초안도 똑같이 급한 상태다.
+  function urgentDeadline(endTime) {
+    if (!endTime) return false;
+    var t = new Date(endTime).getTime();
+    if (isNaN(t)) return false;
+    var cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + 1);
+    cutoff.setHours(23, 59, 59, 999);
+    return t <= cutoff.getTime();
+  }
+
+  function isUrgent(p) {
+    return !!p && p.total > 0 && urgentDeadline(p.endTime);
+  }
 
   // 카드 오버레이 공용 스타일 1회 주입
   function ensureStyle() {
@@ -106,6 +127,7 @@ JSL.register('list-progress', function () {
     var seg = li.querySelector('.jsl-seg');
     if (tile) tile.remove();
     if (seg) seg.remove();
+    if (li.hasAttribute('data-jsl-urgent')) li.removeAttribute('data-jsl-urgent');
     releaseSpace(li);
   }
 
@@ -125,6 +147,9 @@ JSL.register('list-progress', function () {
         // 문항이 0개면 보여줄 진행이 없다 — 빈 타일은 노이즈다
         if (p && p.total > 0) paint(li, p);
         else if (li.querySelector('.jsl-tile')) unpaint(li); // 작성 중에서 벗어난 카드 정리
+        // 마감 임박 경고: 표시는 CSS, 여기서는 속성만 토글한다
+        if (isUrgent(p)) li.setAttribute('data-jsl-urgent', '1');
+        else if (li.hasAttribute('data-jsl-urgent')) li.removeAttribute('data-jsl-urgent');
       }
     } catch (e) {
       console.warn('[자비스] 진행률 오버레이 적용 오류', e);
@@ -139,7 +164,7 @@ JSL.register('list-progress', function () {
     progressById = {};
     state.resumes.forEach(function (r) {
       if (r.category === 0) { // 작성 중만 (미제출 10 제외 — 사용자 결정)
-        progressById[r.id] = { filled: r.qnaFilled, total: r.qnaTotal };
+        progressById[r.id] = { filled: r.qnaFilled, total: r.qnaTotal, endTime: r.endTime || null };
       }
     });
     return true;

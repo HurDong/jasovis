@@ -1,6 +1,6 @@
 // MAIN 월드 (자소서 목록 페이지 전용): resume_list의 Angular 스코프를 읽는 유일한 파일.
 // 격리 월드(bridge.js)와 CustomEvent('JSL_REQ'/'JSL_RES'/'JSL_STATE')로만 통신한다.
-// 목록 페이지 state: { page:'list', resumes:[{id, category, employmentId, employmentCompanyId, sample, qnaTotal, qnaFilled}] }
+// 목록 페이지 state: { page:'list', resumes:[{id, category, employmentId, employmentCompanyId, sample, qnaTotal, qnaFilled, endTime}] }
 (function () {
   'use strict';
 
@@ -45,7 +45,9 @@
           employmentCompanyId: Number.isSafeInteger(Number(r.employment_company_id)) && Number(r.employment_company_id) > 0
             ? Number(r.employment_company_id) : null,
           qnaTotal: qnas.length,
-          qnaFilled: qnas.filter(function (q) { return q.answer && String(q.answer).trim(); }).length
+          qnaFilled: qnas.filter(function (q) { return q.answer && String(q.answer).trim(); }).length,
+          // 마감 임박 경고용. 순수 문자열 그대로 넘기고 판정은 격리 월드에서 한다.
+          endTime: r.end_time == null ? null : String(r.end_time)
         };
       });
       return { page: 'list', resumes: resumes };
