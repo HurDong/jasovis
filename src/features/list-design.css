@@ -44,6 +44,14 @@ html.jsl-fit {
 html.jsl-fit .main-tab.open-chat .resume-list-tmpl-container { padding-right: 0; }
 html.jsl-fit .main-tab.open-chat .resume-search-section { margin-right: 0; padding-right: 0; }
 
+/* 보드 좌우 끝의 회색 세로 띠. 사이트가 .resume-list-tmpl-container에 좌우 32px padding을
+   두고 있고, 그 자리로 뒤의 .main-tab(#f5f5f5)이 비친다 — 우리가 만든 여백이 아니다.
+   다만 위 검색줄은 사이트의 margin:0 -32px 상쇄로 화면 끝까지 흰색인데 보드는 32px 안쪽에서
+   멈춰, 툴바 아래로 ㄱ자 단차가 생긴다. 게다가 왼쪽 끝은 '작성 중' 패널 테두리가 흰색을
+   끊어주지만 마지막 전형 열은 오른쪽 테두리가 없어 흰 바닥이 회색으로 툭 끊긴다.
+   열 위치는 그대로 두고 그 padding 자리만 흰색으로 덮는다. 32px은 좌우 대칭 여백으로 남아
+   카드가 화면 끝에 붙지 않는다. */
+html.jsl-fit .resume-list-tmpl-container,
 html.jsl-fit .scheduler-resume-list-ctrl { background: var(--jsl-canvas); }
 html.jsl-fit .resume-search-section { height: auto !important; min-height: 0 !important; padding-top: 15px; margin-bottom: 10px; background: var(--jsl-canvas); }
 html.jsl-fit .resume-search-container { position: relative; height: auto !important; border: 0 !important; box-shadow: none !important; background: transparent !important; }
@@ -60,8 +68,13 @@ html.jsl-fit .resume-search-field { background: #f6f7f8 !important; border: 1px 
 html.jsl-fit .resume-search-field:hover { background: #f1f2f4 !important; }
 html.jsl-fit .resume-search-field:focus { background: #fff !important; border-color: var(--jsl-brand) !important; box-shadow: 0 0 0 3px rgba(255,104,19,.12); }
 html.jsl-fit .sort-resume-list { align-self: center; min-width: 0; }
-/* 흩어져 있던 정렬 텍스트를 하나의 세그먼트 컨트롤로 묶는다. */
-html.jsl-fit .resume-order-by { display: inline-flex; flex-wrap: wrap; gap: 2px; margin: 0 !important; padding: 3px !important; border-radius: 7px; background: #f2f3f5; }
+/* 흩어져 있던 정렬 텍스트를 하나의 세그먼트 컨트롤로 묶는다.
+   inline-flex만으로는 폭이 안 줄어든다 — 부모 .sort-resume-list가 그리드 칸(1800px대)이라
+   블록 레벨 flex 컨테이너가 칸을 꽉 채우고, 회색 트랙이 항목이 끝난 뒤에도 화면 끝까지 이어져
+   가로의 3분의 2가 빈 회색 막대가 된다. 폭을 내용에 맞춰 묶는 범위를 항목까지로 자른다.
+   남는 오른쪽은 비워 둔다 — 윗줄 오른쪽에 이미 '삭제한 문서'와 '스케쥴러 보기'가 있어서
+   여기까지 채우면 오른쪽 위가 빽빽해진다. */
+html.jsl-fit .resume-order-by { display: inline-flex; width: fit-content; flex-wrap: wrap; gap: 2px; margin: 0 !important; padding: 3px !important; border-radius: 7px; background: #f2f3f5; }
 html.jsl-fit .resume-order-by li { float: none !important; padding: 6px 12px !important; border: 0 !important; border-radius: 5px; color: var(--jsl-muted); font-size: 12.5px; }
 html.jsl-fit .resume-order-by li:hover { color: var(--jsl-ink); }
 
@@ -211,10 +224,17 @@ html.jsl-fit .scheduler .sortable-placeholder::after { content: "여기에 놓�
 html.jsl-fit .scheduler .dropzone:has(.sortable-placeholder) { background: #fffaf6; }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="1"] > .dropzone:has(.sortable-placeholder) { background: #f6f8fb; }
 /* "아래에 카드가 더 있어요" — 작성 중·제출 완료 패널이 안쪽 스크롤로 잘릴 때만.
-   패널 바닥 가운데 떠 있는 작은 알약. 누르면 dropzone을 한 화면 아래로 내린다.
-   스크롤이 맨 아래면 list-layout이 hidden을 걸어 사라진다. */
+   누르면 dropzone을 한 화면 아래로 내린다. 스크롤이 맨 아래면 list-layout이 hidden을 건다.
+   바닥 **가운데**에 뒀더니 그 자리가 두 카드 열의 경계라 양쪽 카드를 걸쳐 물었고,
+   특히 오른쪽 카드의 회사 이름 앞글자를 먹어 글자가 깨진 것처럼 보였다
+   (실측: 이름 23px ≈ 2글자 침범. "포스코 AI - 사무DX"가 "코 AI - 사무DX"로 보임).
+   회사 이름은 카드 왼쪽부터 쓰이므로 **오른쪽 아래 구석**은 대개 비어 있다. 알약 모양은
+   그대로 두고 자리만 옮긴다. 실측: 작성 중 16장 + 제출 완료 13장 모두 글자가 오른쪽 끝에서
+   최소 164px 떨어져 끝나고(알약 자리는 82px), 말줄임표가 걸린 카드도 없다.
+   최악의 경우에도 먹히는 건 이름의 꼬리라 어느 회사인지는 앞부분으로 읽힌다.
+   바닥 전체를 덮는 띠 안은 사용자 반려 — 알약이 낫고 카드 자리를 뺏지 말 것. */
 html.jsl-fit .scheduler .jsl-pane > .jsl-morehint {
-  position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 4;
+  position: absolute; right: 12px; bottom: 10px; z-index: 4;
   display: inline-flex; align-items: center; gap: 5px; margin: 0; padding: 5px 11px 5px 12px;
   border: 1px solid var(--jsl-tint-line); border-radius: 999px; background: #fff;
   box-shadow: 0 3px 10px rgba(0,0,0,.13); color: var(--jsl-accent);

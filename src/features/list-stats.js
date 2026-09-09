@@ -46,10 +46,12 @@ JSL.register('list-stats', function () {
     };
   }
 
-  // 표본 5 미만이면 %가 요동치므로 분수만, 이상이면 %
+  // 결과가 없으면 계산할 게 없다. 있으면 언제나 %다.
+  // 표본 5 미만일 때 분수로 바꾸던 규칙은 뺐다 — 표본이 작다는 건 바로 옆 캡션이
+  // "N 통과 / M 결과"로 이미 말하고 있어서, 게이지까지 분수면 같은 말이 두 번 나오고
+  // 네 칸 중 한 칸만 표기 문법이 달라져 "저 칸만 계산이 안 됐나"로 읽힌다.
   function label(st) {
     if (!st.done) return '–';
-    if (st.done < 5) return st.pass + '/' + st.done;
     return Math.round(st.pass / st.done * 100) + '%';
   }
 
@@ -59,7 +61,9 @@ JSL.register('list-stats', function () {
   function gauge(st, i) {
     var has = st.done > 0;
     var rate = has ? st.pass / st.done * 100 : 0;
-    var fill = has
+    // 통과율 0%에서는 아크를 아예 그리지 않는다. 길이 0에 stroke-linecap="round"를 주면
+    // 아크 시작점에 동그란 점 하나가 찍혀, 숫자 왼쪽에 주황 불릿이 붙은 것처럼 보인다.
+    var fill = rate > 0
       ? '<path d="' + ARC + '" fill="none" stroke="var(--jsl-stage-' + i + ')" stroke-width="8"'
         + ' stroke-linecap="round" stroke-dasharray="' + (ARC_LEN * rate / 100).toFixed(1)
         + ' ' + ARC_LEN.toFixed(1) + '"/>'
