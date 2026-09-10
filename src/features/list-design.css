@@ -216,6 +216,9 @@ html.jsl-fit .scheduler .jsl-grid-column.column1 .list-scroll-area { overflow-an
 /* 카드 형태는 어디서나 같다. 상태는 좌측 3px 띠 색으로만 구분한다. */
 html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node { box-sizing: border-box; position: relative; padding: 11px 12px !important; margin-bottom: 6px; border: 1px solid var(--jsl-line); border-radius: var(--jsl-r); background: white; box-shadow: none; color: var(--jsl-ink); overflow: hidden; transition: box-shadow .13s ease, border-color .13s ease; }
 html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--jsl-stripe, transparent); }
+/* 작성 중은 왼쪽 경계로 카드 단위를 구분한다. 임박 상태의 주황 띠는 아래 규칙이 덮어쓴다. */
+html.jsl-fit .scheduler .dropzone ul.itemlist[category_key="0"] > li.resume-node { --jsl-stripe: #aaa; border-color: #ccc; padding-left: 16px !important; }
+html.jsl-fit .scheduler .dropzone ul.itemlist[category_key="0"] > li.resume-node::before { width: 4px; }
 html.jsl-fit .scheduler .dropzone ul.itemlist > li.resume-node .name { color: var(--jsl-ink); font-size: 13px; line-height: 1.5; font-weight: 500; word-break: keep-all; overflow-wrap: anywhere; }
 /* 제출 완료는 제목 한 줄로 높이를 통일해 두 열의 행을 맞춘다. */
 html.jsl-fit .scheduler ul.itemlist[category_key="1"] > li.resume-node { display: flex; align-items: center; min-width: 0; height: 44px !important; min-height: 44px !important; --jsl-stripe: var(--jsl-navy); }
