@@ -135,6 +135,9 @@ JSL.register('list-layout', function () {
       return { el: el, hadColumn1: el.classList.contains('column1') };
     });
     dragging = true;
+    // 미제출처럼 평소 접혀 있는 칸이 드래그 동안만 받을 자리를 열 수 있게 신호를 준다.
+    // mousedown 캡처 단계라 사이트가 좌표를 재기 전이다 — 드래그 자체에는 영향이 없다.
+    document.documentElement.classList.add('jsl-dragging');
     suspended.forEach(function (item) {
       item.el.classList.remove('column2');
       item.el.classList.add('column1');
@@ -164,6 +167,7 @@ JSL.register('list-layout', function () {
     });
     suspended = [];
     dragging = false;
+    document.documentElement.classList.remove('jsl-dragging');
     document.documentElement.style.removeProperty('--jsl-drag-h');
     schedule(0);
   }
@@ -335,7 +339,7 @@ JSL.register('list-layout', function () {
     restoreDrag();
     document.querySelectorAll('.scheduler .jsl-morehint').forEach(function (n) { n.remove(); });
     cleanup();
-    document.documentElement.classList.remove('jsl-fit', 'jsl-compact', 'jsl-narrow');
+    document.documentElement.classList.remove('jsl-fit', 'jsl-compact', 'jsl-narrow', 'jsl-dragging');
     document.documentElement.style.removeProperty('--jsl-board-h');
     document.documentElement.style.removeProperty('--jsl-ai-h');
   }

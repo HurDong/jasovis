@@ -196,6 +196,17 @@ html.jsl-fit .scheduler .jsl-pane[data-jsl-category="10"]:not(:has(li[resume_nod
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="10"]:not(:has(li[resume_node_id])) .arrow { top: 7px !important; }
 html.jsl-fit .scheduler .jsl-pane[data-jsl-category="10"] > .header .list-title { color: var(--jsl-dim) !important; font-size: 12px !important; font-weight: 400; }
 
+/* 미제출로 카드를 끌어다 놓을 수 있게 한다. 평소에는 제목줄만 남는 얇은 캡슐이라
+   드롭 판정 사각형이 0px다 (실측: dropzone 0px, ul 0px) — 아무리 끌어다 놔도 안 붙는다.
+   원본 DnD는 ul의 사각형으로 판정하므로 ul에 높이가 있어야 한다.
+   평소에 자리를 뺏지 않으면서 받을 수는 있어야 하므로 드래그하는 동안만 연다.
+   list-layout이 mousedown 캡처 단계에서 html.jsl-dragging을 켜므로 사이트가 좌표를
+   재기 전에 배치가 끝나 드래그 자체는 영향받지 않는다.
+   min-height는 max-height(--jsl-hit-h)를 이기므로 updateDragBounds가 잘라도 남는다. */
+html.jsl-fit.jsl-dragging .scheduler .jsl-pane[data-jsl-category="10"] { max-height: min(112px, calc(var(--jsl-board-h) * .14)) !important; }
+html.jsl-fit.jsl-dragging .scheduler .jsl-pane[data-jsl-category="10"]:not(:has(li[resume_node_id])) > .dropzone { padding: 6px 12px 10px; }
+html.jsl-fit.jsl-dragging .scheduler .jsl-pane[data-jsl-category="10"]:not(:has(li[resume_node_id])) > .dropzone > ul.itemlist:not(.header-itemlist) { min-height: 46px !important; }
+
 /* 원래 카드 노드/DOM 순서를 사용하고, 캐시된 2열 top 값 대신 grid가 높이를 계산한다. */
 html.jsl-fit .scheduler .jsl-grid-column .dropzone > ul.itemlist:not(.header-itemlist) { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; align-items: start; align-content: start; height: auto !important; max-height: var(--jsl-hit-h,none); overflow: visible; }
 html.jsl-fit .scheduler .jsl-grid-column .dropzone > ul.itemlist:not(.header-itemlist) { min-height: min(28px,var(--jsl-hit-h,28px)) !important; }
