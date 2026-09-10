@@ -212,3 +212,47 @@
     renderList();
   });
 })();
+
+// ── 채용 사이트 위에 세로 복사 바 띄우기 ──────────────────────────────
+// 팝업을 연 것 자체가 사용자 조작이라 activeTab 권한이 그 탭에만 잠깐 열린다.
+// 그때 relay-panel.js를 한 번 주입한다. 사이트 DOM은 읽지도 쓰지도 않고 우리 막대만 얹는다.
+// 이미 떠 있으면 relay-panel이 스스로 닫는다(토글).
+(function () {
+  var btn = document.getElementById('relay-btn');
+  var sub = document.getElementById('relay-sub');
+  if (!btn || !sub) return;
+
+  // chrome:// 같은 곳엔 어떤 확장도 주입할 수 없다. 미리 알려주고 버튼을 잠근다.
+  function injectable(url) {
+    return /^https?:\/\//.test(url || '');
+  }
+
+  chrome.storage.local.get('jslRelay', function (res) {
+    var snap = res && res.jslRelay;
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      var tab = tabs && tabs[0];
+      if (!tab || !injectable(tab.url)) {
+        sub.textContent = '이 페이지에는 띄울 수 없습니다';
+        return;
+      }
+      if (!snap || !snap.qnas || !snap.qnas.length) {
+        sub.textContent = '자소설에서 자소서를 먼저 열어 주세요';
+        return;
+      }
+      sub.textContent = (snap.title || '자소서') + ' · ' + snap.qnas.length + '문항';
+      btn.disabled = false;
+      btn.addEventListener('click', function () {
+        chrome.scripting.executeScript(
+          { target: { tabId: tab.id }, files: ['src/features/relay-panel.js'] },
+          function () {
+            if (chrome.runtime.lastError) {
+              sub.textContent = '띄우지 못했습니다 — 페이지를 새로고침해 주세요';
+              return;
+            }
+            window.close();
+          }
+        );
+      });
+    });
+  });
+})();

@@ -3,9 +3,19 @@
   "name": "자비스 for 자소설닷컴",
   "version": "0.1.0",
   "description": "자소설닷컴용 비공식 도우미. 문항 대시보드, 복사, 자동 맞춤법검사, 단축키, 답변 뱅크, 전형 통계.",
-  "permissions": ["storage", "clipboardWrite", "clipboardRead"],
-  "host_permissions": ["https://jasoseol.com/*"],
-  "background": { "service_worker": "src/core/gpt-background.js" },
+  "permissions": [
+    "storage",
+    "clipboardWrite",
+    "clipboardRead",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://jasoseol.com/*"
+  ],
+  "background": {
+    "service_worker": "src/core/gpt-background.js"
+  },
   "icons": {
     "16": "assets/icon16.png",
     "48": "assets/icon48.png",
@@ -22,34 +32,67 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://chatgpt.com/*"],
-      "css": ["src/features/gpt-response.css"],
-      "js": ["src/core/gpt-protocol.js", "src/features/gpt-response.js"],
+      "matches": [
+        "https://chatgpt.com/*"
+      ],
+      "css": [
+        "src/features/gpt-response.css"
+      ],
+      "js": [
+        "src/core/gpt-protocol.js",
+        "src/features/gpt-response.js"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://jasoseol.com/chat-slide*", "https://jasoseol.com/desktop/chat-slide*"],
-      "js": ["src/core/chat-react-main.js", "src/core/chat-tools-main.js"],
+      "matches": [
+        "https://jasoseol.com/chat-slide*",
+        "https://jasoseol.com/desktop/chat-slide*"
+      ],
+      "js": [
+        "src/core/chat-react-main.js",
+        "src/core/chat-tools-main.js"
+      ],
       "world": "MAIN",
       "all_frames": true,
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://jasoseol.com/chat-slide*", "https://jasoseol.com/desktop/chat-slide*"],
-      "css": ["src/features/chat-design.css"],
-      "js": ["src/features/chat-reply.js", "src/features/chat-tools.js"],
+      "matches": [
+        "https://jasoseol.com/chat-slide*",
+        "https://jasoseol.com/desktop/chat-slide*"
+      ],
+      "css": [
+        "src/features/chat-design.css"
+      ],
+      "js": [
+        "src/features/chat-reply.js",
+        "src/features/chat-tools.js"
+      ],
       "all_frames": true,
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://jasoseol.com/*"],
-      "js": ["src/core/bridge-main.js", "src/core/list-main.js", "src/core/chat-main.js", "src/core/chat-tools-main.js"],
+      "matches": [
+        "https://jasoseol.com/*"
+      ],
+      "js": [
+        "src/core/bridge-main.js",
+        "src/core/list-main.js",
+        "src/core/chat-main.js",
+        "src/core/chat-tools-main.js"
+      ],
       "world": "MAIN",
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://jasoseol.com/*"],
-      "css": ["src/features/list-design.css", "src/features/chat-design.css"],
+      "matches": [
+        "https://jasoseol.com/*"
+      ],
+      "css": [
+        "src/features/list-design.css",
+        "src/features/chat-design.css"
+      ],
       "js": [
         "src/core/bridge.js",
         "src/core/gpt-protocol.js",
@@ -70,7 +113,8 @@
         "src/features/list-stats.js",
         "src/features/list-sort.js",
         "src/features/watch.js",
-        "src/features/checkpoint.js"
+        "src/features/checkpoint.js",
+        "src/features/relay-source.js"
       ],
       "run_at": "document_idle"
     }
