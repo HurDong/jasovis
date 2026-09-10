@@ -648,7 +648,10 @@ JSL.register('checkpoint', function () {
   // activeQnaId도 다음 state 브로드캐스트가 와야 갱신된다. 그래서 즉시 포커스하지 않고
   // 목표 문항이 실제로 활성화될 때까지 짧게 폴링한다(끝내 안 되면 조용히 포기).
   var FOCUS_POLL_MS = 30;
-  var FOCUS_TIMEOUT_MS = 1500;
+  // 이제 "focus()를 불렀다"가 아니라 "실제로 들어갔다"를 성공 기준으로 쓰므로,
+  // 전환이 느리거나 Angular가 포커스를 한 번 걷어가는 경우까지 버틸 여유를 준다.
+  // 끝내 못 넣으면 조용히 포기한다(사이트 기본 동작을 막지 않는다).
+  var FOCUS_TIMEOUT_MS = 3000;
   var focusTimer = null;
 
   function focusAnswerNow(wantNumber) {
@@ -657,8 +660,11 @@ JSL.register('checkpoint', function () {
     // 전환 중엔 아무 것도 안 보일 수 있다. 이때 findVisibleAnswerTa가 폴백으로 주는
     // '숨은 첫 번째'에 포커스하면 엉뚱한 문항으로 커서가 간다 — 보이는 것만 받는다.
     if (!ta || ta.offsetParent === null) return false;
-    ensureAttached(); // 새 문항 textarea에 오버레이 재부착
-    if (currentTa !== ta) return false;
+    // 오버레이 부착은 해보되, 실패해도 커서 이동은 계속한다. 예전에는 부착 결과
+    // (currentTa === ta)를 통과 조건으로 걸었는데, ensureAttached는 내부 예외를 삼키므로
+    // 부착이 한 번 어긋나면 캐럿이 영영 안 들어가고 사용자는 본문을 마우스로 눌러야 했다.
+    // 검수 하이라이트가 붙는지와 캐럿이 본문에 들어가는지는 별개의 일이다.
+    try { ensureAttached(); } catch (e) { /* 무시 */ }
     try {
       var text = ta.value || '';
       var saved = (activeQnaId != null && typeof offsets[activeQnaId] === 'number')
@@ -671,8 +677,15 @@ JSL.register('checkpoint', function () {
     } catch (e) {
       return false;
     }
-    onInteract();        // 하이라이트 갱신 (+ 같은 위치로 저장)
-    scrollMarkIntoView();
+    // focus()를 불렀다고 들어간 게 아니다 — 전환 직후엔 Angular가 다시 그리면서
+    // 방금 준 포커스를 걷어가기도 한다. 실제로 들어갔을 때만 성공으로 보고,
+    // 아니면 false를 돌려 폴링이 계속 재시도하게 한다.
+    if (document.activeElement !== ta) return false;
+    // 하이라이트 갱신은 오버레이가 실제로 이 textarea에 붙었을 때만 의미가 있다.
+    if (currentTa === ta) {
+      onInteract();      // 하이라이트 갱신 (+ 같은 위치로 저장)
+      scrollMarkIntoView();
+    }
     return true;
   }
 

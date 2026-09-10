@@ -90,7 +90,13 @@ State가 `null`이면 스코프를 못 찾은 것(페이지 로딩 중이거나 
   **문항을 전환하는 쪽은 항상 이 이벤트도 같이 쏜다** (hotkeys의 Alt+숫자, qna-nav 버튼,
   dashboard 카드 클릭) — 문항만 바뀌고 커서가 밖에 남으면 결국 답변란을 마우스로 눌러야 해서
   키보드로 옮긴 의미가 없다. 캐럿은 그 문항에 저장된 검수 위치로, 없으면 글 맨 끝으로 간다.
-  전환이 비동기라 checkpoint 쪽에서 `number`가 활성화될 때까지 30ms 간격으로 최대 1.5초 기다린다.
+  전환이 비동기라 checkpoint 쪽에서 `number`가 활성화될 때까지 30ms 간격으로 최대 3초 기다린다.
+  **성공 판정은 `focus()`를 부른 것이 아니라 `document.activeElement`가 그 textarea가 된 것이다**
+  (2026-09-11) — 전환 직후 Angular가 다시 그리면서 방금 준 포커스를 걷어가는 경우가 있어,
+  호출만으로 성공 처리하면 폴링이 멈추고 캐럿이 밖에 남는다.
+  **검수 오버레이 부착 실패가 캐럿 이동을 막지 않는다** — 예전에는 `currentTa === ta`를
+  통과 조건으로 걸었는데 `ensureAttached`가 내부 예외를 삼키므로, 부착이 한 번 어긋나면
+  캐럿이 영영 안 들어갔다. 하이라이트가 붙는지와 커서가 본문에 들어가는지는 별개다.
 - `'toast'` payload `{message, sub, kind, items, title, duration}` — 알림 표시 (dashboard가 구독/렌더)
   - **위치: 화면 우하단 고정**(`right:20px / bottom:20px`, 위로 쌓임). 위젯 shadow가 아니라
     body에 붙는 별도 호스트(`#jsl-toasts`)에 그린다 — 위젯 호스트에 `transform`이 걸려 있어서
