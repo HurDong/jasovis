@@ -1,5 +1,9 @@
 # 자비스 호출 검증
 
+```sh
+node --test tests/relay/source.test.cjs
+```
+
 복사 패널은 `src/features/relay-source.js`, `src/features/relay-panel.js`와
 `src/core/gpt-background.js`의 `relay:` 메시지 경로를 사용한다.
 
@@ -36,3 +40,14 @@
   답변을 전체 원문과 대조해 앞뒤 공백·빈 줄·줄바꿈이 보존됨을 확인했다.
 - `node --check src/features/relay-panel.js`, `git diff --check`를 통과했다.
 - 실제 확장 클립보드 권한과 변경 후 실사이트 동작은 미검증이다.
+
+## 구릿빛 워프 버튼 — 4번 시안 선택 후
+
+- `source.test.cjs` 자동 테스트 4개: 호버 시 워프 그리기와 라벨·캔버스 보존,
+  호출·닫기 메시지 경로, 숨김·화면 밖·DOM 분리 시 중단과 재개,
+  모션 감소 설정 변경, Canvas 미지원 시 기본 기능 유지를 확인한다.
+- 실제 `relay-source.js`를 가상 JSL/storage/runtime API와 연결한 로컬 브라우저에서
+  버튼 높이 38px, 구릿빛 워프 렌더, 호출 후 캔버스 유지, 패널 ✕로 닫은 뒤
+  라벨 복귀를 확인했다. 브라우저 콘솔 오류·경고는 없었다.
+- `node --check src/features/relay-source.js`, `git diff --check`를 통과했다.
+- 변경 후 실제 자소설 대시보드는 미검증이다. 확장 리로드 후 자소설 탭 새로고침이 필요하다.
