@@ -169,7 +169,8 @@
     x.type = 'button';
     x.className = 'x';
     x.textContent = '✕';
-    x.title = '모든 탭에서 복사 바 끄기';
+    x.title = '모든 탭에서 닫기';
+    x.setAttribute('aria-label', x.title);
     // ✕는 이 탭만이 아니라 전부 끈다 — 다른 탭의 막대는 storage 변화를 보고 스스로 사라진다.
     x.addEventListener('click', function () {
       try { chrome.runtime.sendMessage({ type: 'relay:disable' }, function () { void chrome.runtime.lastError; }); }

@@ -1,4 +1,4 @@
-// 자소서 편집 페이지에서 '모든 탭에 복사 바' 기능의 보내는 쪽을 맡는다.
+// 자소서 편집 페이지에서 '자비스 호출' 기능의 보내는 쪽을 맡는다.
 //  1) 열려 있는 자소서의 문항 스냅샷을 자소서별로 저장한다 (jslRelayDocs).
 //  2) 대시보드에 켜기/끄기 버튼을 붙인다 (JSL.ui.addAction — dashboard.js는 건드리지 않는다).
 //
@@ -66,8 +66,8 @@ JSL.register('relay-source', function () {
   }
 
   // ── 대시보드 버튼 ───────────────────────────────────────────────
-  var LABEL_OFF = '모든 탭에 복사 바';
-  var LABEL_ON = '복사 바 끄기';
+  var LABEL_OFF = '자비스 호출';
+  var LABEL_ON = '자비스 닫기';
 
   function paint() {
     if (!btn) return;
@@ -75,8 +75,8 @@ JSL.register('relay-source', function () {
     btn.textContent = mine ? LABEL_ON : LABEL_OFF;
     btn.classList.toggle('on', mine);
     btn.title = mine
-      ? '모든 탭에서 이 자소서의 복사 바를 내린다'
-      : '브라우저의 모든 탭에 이 자소서의 복사 바를 띄운다';
+      ? '모든 탭에서 닫기'
+      : '다른 페이지에서도 이 자소서를 바로 복사하세요';
   }
 
   function send(msg, done) {
@@ -93,7 +93,7 @@ JSL.register('relay-source', function () {
     var mine = relayOn != null && String(relayOn) === String(myId);
     if (mine) {
       send({ type: 'relay:disable' }, function () {
-        JSL.emit('toast', { message: '복사 바를 내렸습니다.' });
+        JSL.emit('toast', { message: '자비스를 닫았습니다.' });
       });
       return;
     }
@@ -108,8 +108,8 @@ JSL.register('relay-source', function () {
         send({ type: 'relay:options' }, function () { });
         return;
       }
-      if (!res.ok) { JSL.emit('toast', { message: '복사 바를 띄우지 못했습니다.', kind: 'fail' }); return; }
-      JSL.emit('toast', { message: '모든 탭에 복사 바를 띄웠습니다.' });
+      if (!res.ok) { JSL.emit('toast', { message: '자비스를 호출하지 못했습니다.', kind: 'fail' }); return; }
+      JSL.emit('toast', { message: '자비스를 호출했습니다.' });
     });
   }
 
