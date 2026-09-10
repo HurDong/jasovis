@@ -107,6 +107,7 @@ git clone https://github.com/HurDong/jasovis.git
 
 코드를 고친 뒤에는 `chrome://extensions`에서 이 확장의 **새로고침** 버튼을 누르고,
 자소설닷컴 탭도 새로고침해야 반영됩니다.
+ChatGPT 연동을 수정했다면 ChatGPT 탭도 새로고침합니다.
 
 ## 구조
 
@@ -120,6 +121,8 @@ src/
     chat-react-main.js MAIN 월드 — React 채팅 원본 식별·탐색
     chat-tools-main.js MAIN 월드 — 내 메시지 식별·참여 방 조회·전환
     bridge.js          격리 월드 — 편집기·목록 기능용 JSL API
+    gpt-protocol.js    GPT 문항 추출·대응·패킷 검증
+    gpt-background.js  service worker — 대화별 연결·탭 선택·입력 라우팅
   features/            기능 모듈 및 화면 스타일
     dashboard.js       플로팅 위젯 + JSL.ui 슬롯 API + 토스트
     checkpoint.js      검수 위치 마커 / 문장 단위 이동
@@ -128,6 +131,8 @@ src/
     list-menu.js  list-sort.js  watch.js
     chat-jd.js  chat-reply.js  chat-design.css
     chat-tools.js       내 메시지·빠른 이동 패널
+    gpt-connect.js      지원서 상태 조회·연동 입력·반영 확인
+    gpt-response.js     ChatGPT 응답별 연결·적용 UI (gpt-response.css)
   popup/               답변 뱅크 검색 팝업
 assets/                아이콘 · 로고
 ```
@@ -147,5 +152,11 @@ assets/                아이콘 · 로고
 
 ## 문서
 
+- [AGENTS.md](AGENTS.md) — AI 개발 시작 순서와 공통 작업 지침
+- [DEVELOPMENT.md](DEVELOPMENT.md) — 개발 재개용 구조·기능별 파일·확정 UX·제약·검증 방법
+- [CLAUDE.md](CLAUDE.md) — Claude Code에서 공통 지침을 불러오는 진입점
 - [SPEC.md](SPEC.md) — 모듈 간 인터페이스 명세, 실페이지 검증 사실, 키맵, 디자인 규칙
 - [PRIVACY.md](PRIVACY.md) — 로컬 저장 항목, 사이트 통신, 권한 사용 안내
+
+새 AI에게는 **“AGENTS.md부터 읽고 현재 Git 상태를 확인한 뒤, [원하는 작업]을 진행해”**라고 전달하면 됩니다.
+문서를 자동으로 읽지 않는 환경에서는 파일을 직접 첨부하거나 읽을 수 있는 경로를 제공하세요.

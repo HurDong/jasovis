@@ -3,8 +3,11 @@
 서비스명: **자비스** ("자소설 비서"의 줄임말). 콘솔 로그 태그는 `[자비스]`.
 스토어/공개 표기: **"자비스 for 자소설닷컴"** + 비공식(운영사와 무관) 고지 필수 — 상표 오인 방지.
 
-Chrome MV3 익스텐션. 자소설닷컴 자소서 편집 페이지(`https://jasoseol.com/resume/*`)에
-작성 보조 기능을 얹는다. **이 문서가 모든 모듈 간 인터페이스의 단일 기준이다.**
+Chrome MV3 익스텐션. 자소설닷컴 편집기·목록·채팅과 ChatGPT 응답 연동에 보조 기능을 얹는다.
+**이 문서가 모듈 간 인터페이스 명세의 기준이다.** 처음 개발을 시작하면
+[AGENTS.md](AGENTS.md)와 [DEVELOPMENT.md](DEVELOPMENT.md)를 먼저 읽는다.
+날짜가 있는 실측은 당시의 기록이며, 뒤의 변경 기록이 앞의 설계를 대체할 수 있다.
+현재 동작은 해당 기능의 최신 절, manifest와 실제 코드를 함께 확인한다.
 
 ## 검증된 사실 (2026-07-19, 실페이지에서 확인됨)
 
@@ -29,24 +32,26 @@ Chrome MV3 익스텐션. 자소설닷컴 자소서 편집 페이지(`https://jas
   - 활성 문항의 답변란만 보임. 전체 문항 데이터는 DOM이 아닌 스코프에서 읽을 것.
 - `navigator.clipboard.writeText`는 **유저 제스처(클릭/keydown 핸들러) 안에서만 성공.**
 - 사이트에 자동저장/저장기록/맞춤법검사/메모 기능이 이미 내장돼 있음. 우리는 그 위의 보조 UI만.
-- 사이트 전역 CSS 오염이 심하므로 **모든 주입 UI는 Shadow DOM 안에 렌더**할 것.
+- 사이트 전역 CSS 오염이 심하다. 독립 위젯·모달은 Shadow DOM을 사용한다.
+  기존 목록·채팅·GPT 응답에 붙는 UI는 기능별 클래스/속성으로 CSS 범위를 제한한다.
 
 ## 아키텍처: 두 개의 월드
 
 콘텐츠 스크립트 격리 월드에서는 페이지의 `angular`에 접근 불가. 그래서:
 
-- `src/core/bridge-main.js` — `world: "MAIN"`으로 주입. Angular 스코프를 읽고 액션을 실행.
-  격리 월드와 `CustomEvent`로만 통신. **이 파일만 페이지 내부에 접근할 수 있다.**
+- `src/core/bridge-main.js` — `world: "MAIN"`으로 주입. 편집기 Angular 스코프를 읽고 액션을 실행.
+  격리 월드와 `CustomEvent`로 통신한다. 목록·채팅의 페이지 내부 접근은 각 전용 MAIN 브리지가 맡는다.
 - `src/core/bridge.js` — 격리 월드. 전역 네임스페이스 `window.JSL`을 정의.
-  모든 기능 모듈은 이것만 사용한다. **기능 모듈은 절대 `angular`를 직접 만지지 않는다.**
+  이 API를 사용하는 기능 모듈은 브리지를 통해 편집기에 접근한다. 기능 UI가 `angular`를 직접 만지지 않는다.
+  채팅은 전용 이벤트 채널을, GPT 출처 간 연동은 runtime 메시지와 service worker를 추가로 사용한다.
 
 manifest의 `content_scripts.js` 배열 순서 = 실행 순서: `bridge.js` → 각 feature 파일.
-기능 모듈은 로드 즉시 `JSL.register(name, initFn)`을 호출한다.
+JSL 기반 기능 모듈은 로드 시 `JSL.register(name, initFn)`을 호출한다. 독립 채팅/GPT UI는 자체 초기화를 사용한다.
 
 ## JSL API (bridge.js가 제공, 기능 모듈이 소비)
 
 ```js
-JSL.register(name, initFn)      // initFn()은 브릿지가 페이지와 연결된 후 호출됨
+JSL.register(name, initFn)      // content script 로드 후 예약된 초기화에서 호출. 사이트 상태 준비는 별도 확인
 JSL.getState() -> Promise<State | null>   // 스코프 스냅샷 요청 (단발)
 JSL.onState(cb)                 // 클릭·입력 직후 State 브로드캐스트 구독. 2초 폴링은 안전망
 JSL.action(name, payload) -> Promise<{ok, data?}>
@@ -144,28 +149,15 @@ dashboard가 없거나 5초 내 ready 안 되면, 다른 기능은 UI 추가를 
 답변 본문과 분리된 `jslAnswerBankMeta`에 저장한다. 패널 위치와 크기는 기억하며,
 `Esc`로 닫고 `/`로 검색창에 포커스한다.
 
-## 파일 소유권 (병렬 작업 충돌 방지 — 자기 파일만 수정할 것)
+## 파일 변경 범위
 
-| 파일 | 소유 |
-|---|---|
-| `manifest.json`, `SPEC.md`, `src/core/bridge-main.js`, `src/core/bridge.js` | 코어(작성 완료, 수정 금지) |
-| `src/features/dashboard.js` | Agent A |
-| `src/features/copy.js` | Agent B |
-| `src/features/paste.js` | (완료) |
-| `src/features/spellcheck.js` | Agent C |
-| `src/features/hotkeys.js` | Agent D |
-| `src/features/bank.js`, `src/popup/popup.html`, `src/popup/popup.js` | Agent E |
-| `src/features/jd-panel.js` | (완료) |
-| `src/features/chat-jd.js` | (완료) |
-| `src/features/checkpoint.js` | (완료) |
-| `src/features/watch.js`, `src/features/list-sort.js` | (완료) |
-| `src/features/list-layout.js` | (완료) |
-| `src/features/list-menu.js` | (우클릭 빠른 작업 구현, 로컬 확인 완료) |
-| `src/features/qna-nav.js` | **제거됨** — manifest에서 내렸다. 파일만 남아 있고 로드되지 않는다.
-  문항 이동은 대시보드 카드 클릭과 `Alt+숫자` 단축키로 대체. |
+초기 구현 때의 Agent A~E 분담과 코어 수정 금지는 현재의 파일 소유권 규칙이 아니다.
+현재 요청에 필요한 파일을 수정하되 기존 변경과 모듈 간 계약을 보존한다.
+동시에 작업 중인 개발자가 있다면 이번 작업의 변경 범위를 확인해 충돌을 피한다.
+기능별 파일 지도는 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고한다.
 
-manifest.json에 위 파일이 모두 이미 등록돼 있다. 파일이 비어 있으면 안 되므로
-각 파일에는 최소 스텁이 들어 있다 — 스텁을 자기 구현으로 교체하면 된다.
+`src/features/qna-nav.js`는 파일만 남아 있고 manifest에서 로드하지 않는다.
+문항 이동은 대시보드 카드 클릭과 `Alt+숫자` 단축키로 대체한다.
 
 ## 확정 키맵 (hotkeys 기능)
 
