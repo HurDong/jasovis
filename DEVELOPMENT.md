@@ -43,6 +43,7 @@ ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하는 기능도
 | 채팅 색·레이아웃 | `src/features/chat-design.css` |
 | GPT 추출·문항 대응 | `src/core/gpt-protocol.js`, `src/features/gpt-response.js` |
 | GPT 연결·라우팅 | `src/core/gpt-background.js`, `src/features/gpt-connect.js` |
+| 외부 복사 패널 / 호출 버튼 | `src/features/relay-panel.js`, `relay-source.js`, `src/options/options.html`, `src/core/gpt-background.js`의 `relay:` 경로 |
 | GPT UI 스타일 | `src/features/gpt-response.css` |
 
 `src/features/qna-nav.js`는 남아 있는 미사용 파일이며 manifest에 등록되지 않는다.
@@ -97,6 +98,7 @@ Chrome `chrome://extensions`에서 개발자 모드를 켜고 저장소 루트�
 
 ```sh
 node --test tests/gpt/protocol.test.cjs tests/gpt/background.test.cjs tests/chat-tools/main.test.cjs
+node --test tests/relay/source.test.cjs tests/list-cards/menu.test.cjs
 node tests/gpt/browser.cjs
 node tests/chat-tools/serve.cjs
 git diff --check
@@ -107,13 +109,19 @@ git diff --check
 - GPT 브라우저 테스트는 임시 프로필에 실제 확장을 로드하고 두 사이트 HTTPS 요청을 로컬 가상 데이터로 대체한다.
 - 채팅 fixture 서버는 출력된 localhost 주소의 `/`가 React, `/angular`가 Angular 재현 화면이다. 고정 포트를 가정하지 않는다.
 - 테스트 종료 후 자신이 띄운 서버만 종료한다. 사용자의 기존 Chrome 프로필·탭이나 다른 개발 서버를 정리하지 않는다.
-- 자세한 시나리오: [GPT 검증](tests/gpt/README.md), [채팅 도구 검증](tests/chat-tools/README.md).
+- 자세한 시나리오: [GPT 검증](tests/gpt/README.md), [채팅 도구 검증](tests/chat-tools/README.md),
+  [호출 패널 검증](tests/relay/README.md), [목록 카드·공고 링크 검증](tests/list-cards/README.md).
 
 ## 검증 기록과 남은 제약
 
-- GPT 연동은 2026-09-10 작업에서 Node 테스트 23개(채팅 회귀 포함)와 로컬 MV3 흐름을 통과했다.
-  실제 GPT/지원서 DOM은 읽기 확인했고 실제 지원서 시험 입력·서버 저장은 수행하지 않았다.
-  이후 사용자 화면에서 연결 선택 UI가 보이는 것을 확인했지만 전체 실사이트 입력 검증으로 확대 해석하지 않는다.
+- 2026-09-11 GPT 관련 자동 검사 25개(채팅 회귀 포함)와 로컬 MV3 브라우저 흐름을 통과했다.
+  사용자가 적용 후 `자소설에서 확인 ↗`의 실사이트 동작을 확인했다. 다른 창 포커스·예외 경로는
+  로컬 검사 결과이며, 서버 저장이나 모든 지원서 조합까지 검증된 것은 아니다.
+- 오늘 반영한 UX: 호출/닫기 명칭, 두 줄 문항 미리보기, 구릿빛 워프 호출 버튼, 차콜 복사 패널,
+  작성 중 카드의 회색 경계 띠, 기업 채용사이트 링크 복사, GPT 적용 후 대상 탭 이동.
+  상세 계약은 SPEC의 각 기능 절, 검증 범위는 각 테스트 README를 기준으로 한다.
+- 세션 초 사용자는 문항 전환 후 커서와 당시 복사 바의 정상 동작을 확인했다.
+  이후 시각 변경·기업 링크 복사의 모든 경로에 대한 확인으로 확대하지 않는다.
 - 사이트 셀렉터, Angular 모델, React 채팅 모듈 식별은 외부 사이트 변경에 영향을 받는다.
 - 채팅의 OS Alt+Tab 동작과 fixture의 모의 visibility 이벤트는 서로 다른 검증이다.
 - 목록 전체·서버 저장·모든 채팅 경로를 포괄하는 통합 자동 테스트는 없다. 변경한 흐름에 맞는 재현과 검증을 추가한다.
