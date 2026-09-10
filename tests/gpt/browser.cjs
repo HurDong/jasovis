@@ -31,6 +31,21 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'jsl-gpt-'));
     assert.equal(await target.evaluate(() => saves), 0);
     await gpt.locator('.code-copy').first().click(); assert.equal(await gpt.evaluate(() => copied), 1);
     console.log('PASS: natural 5-question response, all code languages, exact text, first connection, native copy, no save');
+    if (process.env.JSL_GPT_SCREENSHOT) await gpt.locator('[data-jsl-gpt]').first().screenshot({path:process.env.JSL_GPT_SCREENSHOT});
+    const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
+    const targetId = await worker.evaluate(async () => (await chrome.tabs.query({url:'https://jasoseol.com/resume/55'}))[0].id);
+    await gpt.getByRole('button', {name:'자소설에서 확인 ↗',exact:true}).first().click();
+    await gpt.waitForFunction(() => !document.querySelector('[data-jsl-gpt] button').disabled);
+    assert.equal(await worker.evaluate(async id => (await chrome.tabs.get(id)).active, targetId), true);
+    const otherWindow = await worker.evaluate(async id => (await chrome.windows.create({tabId:id,focused:false})).id, targetId);
+    await gpt.bringToFront();
+    await gpt.getByRole('button', {name:'자소설에서 확인 ↗',exact:true}).first().click();
+    await gpt.waitForFunction(() => !document.querySelector('[data-jsl-gpt] button').disabled);
+    assert.equal(await worker.evaluate(async id => (await chrome.windows.get(id)).focused, otherWindow), true);
+    assert.deepEqual(await answers(), F.answers); assert.equal(await target.evaluate(() => saves), 0);
+    await gpt.bringToFront();
+    console.log('PASS: review button focuses applied tab and its other window without writing or saving');
+
 
     const sizes = await gpt.evaluate(() => { const a = document.querySelector('.markdown').getBoundingClientRect(), b = document.querySelector('[data-jsl-gpt]').getBoundingClientRect(); return [a.x, b.x, a.width, b.width]; });
     assert.ok(Math.abs(sizes[0] - sizes[1]) < 1 && Math.abs(sizes[2] - sizes[3]) < 1);

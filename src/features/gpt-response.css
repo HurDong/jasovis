@@ -14,3 +14,6 @@
 [data-jsl-gpt] .jsl-gpt-candidate pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font: inherit; padding: 8px; background: #8881; }
 [data-jsl-gpt] select { width: 100%; min-width: 0; background-color: Canvas; color: CanvasText; }
 html.dark [data-jsl-gpt] button.jsl-gpt-primary { color: #ffb580; }
+
+[data-jsl-gpt] .jsl-gpt-result { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+[data-jsl-gpt] .jsl-gpt-result > button { margin-top: 9px; flex-shrink: 0; }

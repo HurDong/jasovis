@@ -4,12 +4,13 @@ const P = require('../../src/core/gpt-protocol');
 function fixture() {
   const storage = {}, state = { resume: { id: 55, title: '예시기업' }, qnas: [{ id: 91, number: 1, question: '지원 동기', answer: '기존' }] };
   const targetTabs = [{ id: 2, url: 'https://jasoseol.com/resume/55', title: '예시기업', windowId: 1 }];
-  const flags = { sourceValid: true, documentKey: 'doc1', writes: 0, beforeWrite: null, reads: 0, beforeRead: null };
+  const flags = { sourceValid: true, documentKey: 'doc1', writes: 0, focusedTabs: [], focusedWindows: [], beforeWrite: null, reads: 0, beforeRead: null };
   let listener;
-  const chrome = { storage: { local: {
+  const chrome = { permissions: { onRemoved: { addListener() {} } }, storage: { local: {
     get: async key => ({ [key]: storage[key] }), set: async values => Object.assign(storage, structuredClone(values)), remove: async key => { delete storage[key]; }
   } }, tabs: {
     query: async () => structuredClone(targetTabs), get: async id => structuredClone(targetTabs.find(t => t.id === id) || { id, url: 'https://example.com' }),
+    update: async (id, changes) => { flags.focusedTabs.push({id, ...changes}); },
     create: async ({ url }) => ({ id: 99, url }),
     sendMessage: async (id, message) => {
       if (message.type === 'gpt:source-check') return { valid: flags.sourceValid };
@@ -21,7 +22,7 @@ function fixture() {
         return { applied: true, status: '입력 확인' };
       }
     }
-  }, runtime: { onMessage: { addListener: fn => { listener = fn; } } } };
+  }, windows: { update: async (id, changes) => { flags.focusedWindows.push({id, ...changes}); } }, runtime: { onMessage: { addListener: fn => { if (!listener) listener = fn; } } } };
   vm.runInNewContext(fs.readFileSync(require.resolve('../../src/core/gpt-background.js'), 'utf8'), { chrome, JSLGpt: P, importScripts() {}, URL, crypto, console });
   const base = { conversation: 'chat1', response: 'response1', fingerprint: 'hash1' };
   const send = (type, extra = {}, sender = {}) => new Promise(resolve => listener({ ...base, type, ...extra }, { frameId: 0, tab: { id: 1 }, url: 'https://chatgpt.com/c/chat1', ...sender }, resolve));
@@ -76,4 +77,33 @@ test('출처·프레임 거부, 로컬 연결 정보에는 답변 본문을 저�
   assert.equal((await f.send('gpt:connect', { tabId: 2 }, { frameId: 1 })).ok, false);
   const link = await f.connect(); await f.prepare(link);
   assert.equal(JSON.stringify(f.storage).includes('새 답변'), false); assert.equal(JSON.stringify(f.storage).includes('기존'), false);
+});
+
+
+test('확인 버튼은 실제 적용 탭과 그 창을 선택하고 추가 입력하지 않는다', async () => {
+  const f = fixture(), link = await f.connect();
+  f.targetTabs.push({ ...f.targetTabs[0], id: 3, windowId: 9 });
+  const p = await f.prepare(link, { tabId: 3 });
+  const result = await f.send('gpt:apply', { revision: link.revision, token: p.token });
+  assert.equal(result.target.tabId, 3);
+  const focused = await f.send('gpt:focus', { revision: link.revision, target: result.target });
+  assert.equal(focused.focused, true);
+  assert.deepEqual(f.flags.focusedTabs, [{id:3,active:true}]);
+  assert.deepEqual(f.flags.focusedWindows, [{id:9,focused:true}]);
+  assert.equal(f.flags.writes, 1);
+});
+
+test('확인 대상 소실·페이지 이동·연결 변경·응답 변경은 탭을 전환하지 않는다', async () => {
+  for (const kind of ['closed', 'page', 'link', 'source', 'resume']) {
+    const f = fixture(), link = await f.connect(), p = await f.prepare(link);
+    const result = await f.send('gpt:apply', { revision: link.revision, token: p.token });
+    if (kind === 'closed') f.targetTabs.length = 0;
+    if (kind === 'page') f.targetTabs[0].url = 'https://jasoseol.com/resume/56';
+    if (kind === 'link') await f.connect();
+    if (kind === 'source') f.flags.sourceValid = false;
+    if (kind === 'resume') result.target.resumeId = '56';
+    assert.equal((await f.send('gpt:focus', {revision:link.revision,target:result.target})).ok, false, kind);
+    assert.equal(f.flags.focusedTabs.length, 0, kind);
+    assert.equal(f.flags.writes, 1, kind);
+  }
 });

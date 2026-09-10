@@ -75,6 +75,7 @@
     node.addEventListener('click', action); return node;
   }
   function linkText(entry, link) {
+    if (entry.link?.revision !== link?.revision) { entry.review.hidden = true; entry.reviewTarget = null; }
     entry.link = link;
     entry.connected.textContent = link ? '연결: ' + link.resume.title : '이 대화에 연결된 지원서 없음';
     entry.change.hidden = !link; entry.unlink.hidden = !link;
@@ -127,6 +128,7 @@
   }
   async function apply(entry, tabId, choices = {}, expected) {
     const snapshot = await sourceCheck(entry, expected);
+    entry.review.hidden = true; entry.reviewTarget = null;
     entry.choices.replaceChildren(); entry.status.textContent = '지원서와 문항 확인 중…';
     const info = await send(entry, 'gpt:info', {}, snapshot.fingerprint); linkText(entry, info.link);
     if (!info.link) { chooseTargets(entry, info, true, snapshot.fingerprint); return; }
@@ -136,6 +138,8 @@
     if (result.mapping) { chooseMapping(entry, result.mapping, tabId, snapshot.fingerprint); return; }
     entry.status.textContent = result.title + ' · 문항 ' + result.numbers.join(', ') + ' 입력 중…';
     const applied = await send(entry, 'gpt:apply', { revision: info.link.revision, token: result.token }, snapshot.fingerprint);
+    entry.reviewTarget = applied.target ? { target: applied.target, revision: info.link.revision, fingerprint: snapshot.fingerprint } : null;
+    entry.review.hidden = !entry.reviewTarget;
     entry.status.textContent = applied.error || applied.status || '입력 결과 확인 불가 · 지원서에서 현재 내용을 확인해 주세요.';
   }
   function attach(message, turn, body) {
@@ -143,6 +147,12 @@
     const entry = { id: crypto.randomUUID(), conversation: current, panel, message, turn };
     panel.dataset.jslGptResponse = entry.id;
     entry.status = el('div', '', 'jsl-gpt-status'); entry.status.setAttribute('role', 'status');
+    entry.review = button('자소설에서 확인 ↗', () => task(entry, async () => {
+      const review = entry.reviewTarget;
+      if (!review) return;
+      await send(entry, 'gpt:focus', { target: review.target, revision: review.revision }, review.fingerprint);
+    }));
+    entry.review.hidden = true;
     entry.connected = el('span', '', 'jsl-gpt-muted'); entry.choices = el('div', null, 'jsl-gpt-choices');
     entry.change = button('연결 변경', () => task(entry, async () => {
       const snapshot = await sourceCheck(entry);
@@ -154,7 +164,9 @@
     }));
     const actions = el('div', null, 'jsl-gpt-actions');
     actions.append(button('자소설에 적용', () => task(entry, () => apply(entry)), 'jsl-gpt-primary'), entry.connected, entry.change, entry.unlink);
-    panel.append(actions, entry.status, entry.choices);
+    const result = el('div', null, 'jsl-gpt-result');
+    result.append(entry.status, entry.review);
+    panel.append(actions, result, entry.choices);
     // article 전체가 아니라 markdown과 같은 부모/폭에 둔다.
     if (body === message) message.append(panel); else body.after(panel);
     entries.set(entry.id, entry); linkText(entry, null);

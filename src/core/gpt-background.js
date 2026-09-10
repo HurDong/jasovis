@@ -49,6 +49,18 @@ async function handle(message, sender) {
       return { opened: (await chrome.tabs.create({ url })).id };
     }
     if (!link || link.revision !== message.revision) throw Error('지원서 연결이 변경되었습니다. 연결을 확인한 뒤 다시 적용해 주세요.');
+    if (message.type === 'gpt:focus') {
+      const target = message.target;
+      if (!Number.isInteger(target?.tabId) || target.resumeId !== link.resume.id) throw Error('확인할 지원서 정보가 변경되었습니다.');
+      let tab;
+      try { tab = await chrome.tabs.get(target.tabId); }
+      catch { throw Error('입력했던 탭이 닫혔습니다. 열린 지원서를 직접 확인해 주세요.'); }
+      if (!tab.url?.startsWith('https://jasoseol.com/') || resumeId(tab.url) !== target.resumeId) throw Error('입력했던 탭이 다른 페이지로 이동했습니다.');
+      await source(message, sender);
+      await chrome.tabs.update(tab.id, { active: true });
+      await chrome.windows.update(tab.windowId, { focused: true });
+      return { focused: true };
+    }
     if (message.type === 'gpt:prepare') {
       const tabs = (await targets()).filter(t => t.resumeId === link.resume.id);
       // 자동으로 고른 탭은 고정하지 않는다. 매번 유일한지 확인한다.
@@ -81,8 +93,9 @@ async function handle(message, sender) {
       if (fresh.documentKey !== pending.documentKey || !JSLGpt.sameQuestions(link, fresh.state)) throw Error('대상 지원서가 새로고침되거나 변경되었습니다. 다시 적용해 주세요.');
       JSLGpt.validate(pending.packet, fresh.state, true);
       await source(message, sender);
-      return await chrome.tabs.sendMessage(pending.tabId, { type: 'gpt:write', packet: pending.packet,
+      const result = await chrome.tabs.sendMessage(pending.tabId, { type: 'gpt:write', packet: pending.packet,
         documentKey: pending.documentKey }, { frameId: 0 });
+      return { ...result, target: { tabId: pending.tabId, resumeId: link.resume.id } };
     } finally { locks.delete(resumeLock); }
   } finally { locks.delete(lock); }
 }
