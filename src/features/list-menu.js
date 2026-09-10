@@ -77,13 +77,12 @@ JSL.register('list-menu', function () {
     var info = cards.get(active.id);
     active.editor = location.origin + (info && info.sample ? '/resume?sample=true' : '/resume/' + active.id);
     active.companyId = info && positiveId(info.employmentCompanyId);
-    active.notice = active.companyId ? 'https://link.jasoseol.com/recruit/' + active.companyId : null;
     editor.href = editorNew.href = active.editor;
-    notice.setAttribute('aria-disabled', String(!active.notice));
-    noticeCopy.setAttribute('aria-disabled', String(!active.notice));
+    notice.setAttribute('aria-disabled', String(!active.companyId));
+    noticeCopy.setAttribute('aria-disabled', String(!active.companyId));
     chat.setAttribute('aria-disabled', String(!active.companyId));
     chat.title = active.companyId ? '' : '연결된 채용공고가 없어 채팅방을 열 수 없습니다';
-    notice.title = noticeCopy.title = active.notice ? '' : info ? '연결된 채용공고가 없습니다' : '공고 정보를 확인하지 못했습니다';
+    notice.title = noticeCopy.title = active.companyId ? '' : info ? '연결된 채용공고가 없습니다' : '공고 정보를 확인하지 못했습니다';
   }
   function receive(state) {
     if (!state || state.page !== 'list') { if (active) close(); if (!onListPage()) closeNotice(); return; }
@@ -136,6 +135,7 @@ JSL.register('list-menu', function () {
     observer.disconnect();
     clearTimeout(closeTimer);
     if (menu) { menu.hidden = true; hideSub(); }
+    if (active && active.copyRequest) active.copyRequest.abort();
     active = null;
     if (restoreFocus && previousFocus && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
     previousFocus = null;
@@ -190,6 +190,27 @@ JSL.register('list-menu', function () {
       var url = new URL(value, location.origin);
       return /^https?:$/.test(url.protocol) ? url.href : null;
     } catch (error) { return null; }
+  }
+  function companyNoticeUrl(value) {
+    if (typeof value !== 'string' || !value.trim()) return null;
+    try {
+      var url = new URL(value.trim());
+      if (!/^https?:$/.test(url.protocol) || url.username || url.password) return null;
+      if (/(^|\.)jasoseol\.com$/i.test(url.hostname)) return null;
+      return url.href;
+    } catch (error) { return null; }
+  }
+  function fetchCompanyNotice(selected) {
+    selected.copyRequest = new AbortController();
+    return fetch('/api/v1/employment_companies/' + selected.companyId + '?skip_read_log=true', {
+      credentials: 'include', signal: selected.copyRequest.signal
+    }).then(function (response) {
+      if (!response.ok) throw new Error('notice-link');
+      return response.json();
+    }).then(function (job) {
+      // 원본 공고의 채용사이트 주소. 자소설 공유 링크로 대체하지 않는다.
+      return companyNoticeUrl(job && job.employment_page_url);
+    });
   }
   function renderNotice(html) {
     var parsed = new DOMParser().parseFromString(String(html || ''), 'text/html');
@@ -296,13 +317,19 @@ JSL.register('list-menu', function () {
       });
       return;
     }
-    var source = action === 'copy-notice' ? Promise.resolve(active.notice) :
+    if (captured.copying) return;
+    captured.copying = true;
+    status.textContent = '복사할 내용을 확인하는 중…';
+    position();
+    var source = action === 'copy-notice' ? fetchCompanyNotice(captured) :
       JSL.action('getListResumeText', { id: active.id }).then(function (r) { return r && r.ok && r.data ? r.data.text : null; });
     source.then(function (text) {
-      if (active !== captured) return null;
-      if (typeof text !== 'string' || !text.trim()) { status.textContent = '복사할 내용을 읽지 못했습니다'; position(); return null; }
+      if (active !== captured || !onListPage()) return null;
+      if (typeof text !== 'string' || !text.trim()) { status.textContent = action === 'copy-notice' ? '등록된 기업 채용사이트 주소가 없습니다' : '복사할 내용을 읽지 못했습니다'; position(); return null; }
       return copyText(text);
     }).then(function (ok) {
+      captured.copying = false;
+      captured.copyRequest = null;
       if (ok === null) return;
       if (active !== captured) return;
       hideSub();
@@ -310,6 +337,12 @@ JSL.register('list-menu', function () {
       shadow.querySelector('.copy-toggle').focus({ preventScroll: true });
       position();
       if (ok) closeTimer = setTimeout(function () { close(true); }, 900);
+    }).catch(function () {
+      captured.copying = false;
+      captured.copyRequest = null;
+      if (active !== captured) return;
+      status.textContent = '복사할 내용을 불러오지 못했습니다. 다시 시도해 주세요';
+      position();
     });
   }
 
