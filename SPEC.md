@@ -500,6 +500,30 @@ Angular 가상 화면에서는 본인 메시지 5개(인용 제외)와 참여 �
 - 헤더·입력창은 흰색과 목록의 회색 테두리를 사용한다. 공고 버튼 줄은 옅은 주황 배경 `#FFF5ED`와 따뜻한 경계선으로 구분하고, 호버 시 `#FFEBDC`로 강조한다. 브랜드 주황은 헤더 띠와 공고 아이콘에도 사용한다. 기존 닉네임 색, 메시지 정렬, 입력창 크기, 답장/검색/좋아요 및 이전 메시지 로딩 동작은 유지한다.
 - 선택된 브랜드 주황 위 흰 글자는 작은 글자 WCAG AA 대비 기준을 충족하지 않는다. 사용자 확인 시안의 색을 유지한 선택이며 접근성 기준 통과로 간주하지 않는다.
 
+### "내 채팅" 목록이 잘리던 것 — 사이트 버그 우회 (2026-09-10)
+
+증상: 채팅 패널의 "내 채팅 31"에서 방이 18개까지만 보이고 스크롤이 없어 뒤쪽에 닿을 수 없다.
+
+실측(`jasoseol.com/chat-slide` iframe 내부) — `MyChatItem` **31개가 전부 DOM에 있고**
+목록 전체 높이는 **2153px**인데, 바깥 래퍼가 `relative w-screen h-screen overflow-hidden`
+(사이트 자체 Tailwind 클래스)이라 iframe 높이 **1209px**에서 잘린다. 그 안에
+**스크롤 컨테이너가 하나도 없다**(`overflow: auto|scroll`인 조상 0개). 892px이 잘려
+**31개 중 18개만 닿았다** — 사용자 스크린샷의 행 수와 정확히 일치한다.
+
+**우리 CSS 탓이 아님을 확인했다.** iframe의 `document.styleSheets`는 둘뿐이고(Toastify +
+사이트 Next.js 번들) `chat-design.css`는 목록에 없다. 그 시트를 꺼도 `overflow: hidden`이
+그대로다. 문제의 선언은 사이트 번들의 `.overflow-hidden { overflow: hidden; }`이다.
+높이를 화면에 고정해 놓고 안쪽 스크롤을 주지 않은 사이트 버그다.
+
+우리가 이미 이 프레임에 CSS를 넣고 있으므로 한 줄로 우회한다 —
+`div.h-screen.overflow-hidden:has(.my-chats-list) { overflow-y: auto }`.
+
+- `.my-chats-list`는 사이트가 붙인 의미 있는 클래스라 "내 채팅" 화면에서만 존재한다.
+  채팅 홈에서는 매칭되지 않음을 확인했고(`matches()` false), 홈의 자체 스크롤러
+  (`h-[calc(100vh-52px)] overflow-y-scroll`, 523px)도 그대로다.
+- 사이트가 고치면 이미 스크롤되는 컨테이너에 `overflow-y: auto`가 겹칠 뿐이라 무해해진다.
+- 검증: 적용 후 892px 스크롤되고 마지막 방이 완전히 보인다(`lastItemFullyVisible: true`).
+
 ## 채팅방 → 그 회사 공고 모달 (`src/features/chat-jd.js`) — 2026-07-27 실계정 검증
 
 오른쪽 채팅 패널에서 **다른 회사(B사) 채팅방**을 열면 헤더 아래에 공고 버튼 줄이 생기고,

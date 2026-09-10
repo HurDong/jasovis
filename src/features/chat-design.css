@@ -172,3 +172,16 @@
 @media (prefers-reduced-motion: reduce) {
   :is(.chat-container.chat-window .message_target-message, #chatBody blockquote[data-sentry-component="TargetMessage"])[data-jsl-reply] { transition: none; }
 }
+
+/* 사이트 버그 우회 — "내 채팅" 목록이 잘려서 뒤쪽 방에 닿을 수가 없다.
+   목록은 31개를 전부 그려 놓는데(2153px), 그 바깥 래퍼가 사이트 자체 Tailwind 클래스
+   `relative w-screen h-screen overflow-hidden`이라 iframe 높이(1209px)에서 잘리고
+   안쪽에 스크롤 컨테이너가 하나도 없다. 실측: 892px이 잘려 31개 중 18개만 닿았다.
+   우리 CSS 탓이 아니다 — iframe의 스타일시트는 사이트 것 둘뿐이고, 그 시트를 꺼도 그대로다.
+   `.my-chats-list`(사이트가 붙인 의미 있는 클래스)가 안에 있을 때만 걸어 다른 화면의
+   `.overflow-hidden`은 건드리지 않는다. 사이트가 고치면 이 규칙은 저절로 무해해진다. */
+div.h-screen.overflow-hidden:has(.my-chats-list) {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #999 transparent;
+}
