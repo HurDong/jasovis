@@ -146,6 +146,53 @@
   }
 
   const actions = {
+    applyGptAnswers: function (packet) {
+      // Validate the entire batch against fresh model state before the first write.
+      scope = findScope();
+      const before = snapshot();
+      try {
+        // MAIN has its own guard: isolated-world globals are intentionally inaccessible.
+        if (!before || location.pathname.match(/^\/resume\/(\d+)\/?$/)?.[1] !== String(packet?.resumeId) ||
+            packet?.version !== 1 || String(packet.resumeId) !== String(before.resume.id) ||
+            !Array.isArray(packet.answers) || !packet.answers.length || packet.answers.length > 100) throw Error('지원서 연결 정보가 다릅니다.');
+        const ids = new Set(), numbers = new Set();
+        packet.answers.forEach(function (a) {
+          const matches = before.qnas.filter(q => String(q.id) === String(a.id));
+          if (!/^\d+$/.test(String(a.id)) || !Number.isSafeInteger(a.number) || a.number < 1 ||
+              ids.has(String(a.id)) || numbers.has(a.number) || typeof a.text !== 'string' || !a.text.trim() || a.text.length > 100000 ||
+              matches.length !== 1 || Number(matches[0].number) !== a.number || matches[0].question !== a.question ||
+              typeof a.expectedAnswer !== 'string' || matches[0].answer !== a.expectedAnswer) {
+            throw Error('문항 ID·번호·질문 또는 답변 형식이 다릅니다.');
+          }
+          ids.add(String(a.id)); numbers.add(a.number);
+        });
+      }
+      catch (e) { return { ok: false, data: { error: e.message } }; }
+      const s = scope;
+      const targets = packet.answers.map(a => Object.values(s.qnas).find(q => String(q.id) === String(a.id)));
+      const originals = targets.map(q => q.answer || '');
+      let failure = null;
+      const write = function () {
+        try {
+          targets.forEach(function (q, i) { q.answer = packet.answers[i].text; });
+          targets.forEach(function (q) {
+            if (typeof s.qna_change === 'function') s.qna_change(q);
+            if (typeof s.answer_keyup === 'function') s.answer_keyup(q);
+          });
+        } catch (e) {
+          targets.forEach(function (q, i) { q.answer = originals[i]; });
+          failure = e;
+        }
+      };
+      try {
+        if ((s.$root || s).$$phase) { write(); s.$evalAsync(function () {}); }
+        else s.$apply(write);
+      } catch (e) { failure = e; }
+      const ta = document.querySelector('textarea.answer');
+      if (ta) ta.dispatchEvent(new Event('input', { bubbles: true }));
+      scheduleStateBroadcast();
+      return { ok: !failure, data: { error: failure ? '입력 중 오류가 발생했습니다. 현재 답변을 확인해 주세요.' : null } };
+    },
     switchQna: function (payload) {
       const num = payload && payload.number;
       if (!num) return { ok: false };

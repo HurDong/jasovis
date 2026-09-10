@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "description": "자소설닷컴용 비공식 도우미. 문항 대시보드, 복사, 자동 맞춤법검사, 단축키, 답변 뱅크, 전형 통계.",
   "permissions": ["storage", "clipboardWrite", "clipboardRead"],
+  "host_permissions": ["https://jasoseol.com/*"],
+  "background": { "service_worker": "src/core/gpt-background.js" },
   "icons": {
     "16": "assets/icon16.png",
     "48": "assets/icon48.png",
@@ -19,6 +21,12 @@
     "default_popup": "src/popup/popup.html"
   },
   "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "css": ["src/features/gpt-response.css"],
+      "js": ["src/core/gpt-protocol.js", "src/features/gpt-response.js"],
+      "run_at": "document_idle"
+    },
     {
       "matches": ["https://jasoseol.com/chat-slide*", "https://jasoseol.com/desktop/chat-slide*"],
       "js": ["src/core/chat-react-main.js", "src/core/chat-tools-main.js"],
@@ -44,6 +52,8 @@
       "css": ["src/features/list-design.css", "src/features/chat-design.css"],
       "js": [
         "src/core/bridge.js",
+        "src/core/gpt-protocol.js",
+        "src/features/gpt-connect.js",
         "src/features/dashboard.js",
         "src/features/jd-panel.js",
         "src/features/chat-jd.js",

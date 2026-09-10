@@ -1,0 +1,16 @@
+[data-jsl-gpt] { box-sizing: border-box; width: 100%; min-width: 0; margin: 14px 0 8px; padding: 12px 0; border-top: 1px solid #8884; font-size: 13px; line-height: 1.5; color: inherit; }
+[data-jsl-gpt] .jsl-gpt-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+[data-jsl-gpt] button, [data-jsl-gpt] select { font: inherit; color: inherit; border: 1px solid #8886; border-radius: 8px; background: transparent; padding: 7px 10px; cursor: pointer; }
+[data-jsl-gpt] button:hover { background: #8881; }
+[data-jsl-gpt] button:disabled { opacity: .55; cursor: wait; }
+[data-jsl-gpt] button.jsl-gpt-primary { background: #ff6b0015; color: #b34300; border-color: #ff6b0070; font-weight: 650; }
+[data-jsl-gpt] button[hidden] { display: none; }
+[data-jsl-gpt] :focus-visible { outline: 2px solid #ff6b00; outline-offset: 2px; }
+[data-jsl-gpt] .jsl-gpt-muted { opacity: .72; overflow-wrap: anywhere; }
+[data-jsl-gpt] .jsl-gpt-status:not(:empty), [data-jsl-gpt] .jsl-gpt-choices:not(:empty) { margin-top: 9px; }
+[data-jsl-gpt] .jsl-gpt-choices { display: grid; gap: 8px; }
+[data-jsl-gpt] .jsl-gpt-choices > button { text-align: left; overflow-wrap: anywhere; }
+[data-jsl-gpt] .jsl-gpt-candidate { display: grid; gap: 6px; padding: 10px; border: 1px solid #8885; border-radius: 8px; min-width: 0; }
+[data-jsl-gpt] .jsl-gpt-candidate pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font: inherit; padding: 8px; background: #8881; }
+[data-jsl-gpt] select { width: 100%; min-width: 0; background-color: Canvas; color: CanvasText; }
+html.dark [data-jsl-gpt] button.jsl-gpt-primary { color: #ffb580; }
