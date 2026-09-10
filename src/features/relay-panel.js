@@ -10,11 +10,12 @@
 
   var HOST_ID = 'jsl-relay-host';
   var POS_KEY = 'jslRelayPos';
-  var DATA_KEY = 'jslRelay';
+  var DOCS_KEY = 'jslRelayDocs';
+  var ON_KEY = 'jslRelayOn';
 
-  // 다시 주입되면 토글로 동작한다 — 팝업 버튼을 한 번 더 누르면 닫힌다.
-  var existing = document.getElementById(HOST_ID);
-  if (existing) { existing.remove(); return; }
+  // 등록된 콘텐츠 스크립트라 페이지마다 한 번씩 돈다. 이미 붙어 있으면 그대로 둔다
+  // (중복 주입 시 지워버리면 새로고침마다 깜빡인다).
+  if (document.getElementById(HOST_ID)) return;
 
   var host = document.createElement('div');
   host.id = HOST_ID;
@@ -60,6 +61,7 @@
   var data = null;
   var cur = 0;          // 현재 문항 인덱스
   var copied = {};      // 이번 세션에 복사한 문항 (회색 처리용)
+  var mounted = false;
 
   function showTip(text, y) {
     tip.textContent = text;
@@ -159,7 +161,12 @@
     x.className = 'x';
     x.textContent = '✕';
     x.title = '닫기';
-    x.addEventListener('click', function () { host.remove(); });
+    // ✕는 이 탭만이 아니라 전부 끈다 — 다른 탭의 막대는 storage 변화를 보고 스스로 사라진다.
+    x.addEventListener('click', function () {
+      try { chrome.runtime.sendMessage({ type: 'relay:disable' }, function () { void chrome.runtime.lastError; }); }
+      catch (e) { /* 무시 */ }
+      host.remove();
+    });
     return x;
   }
 
@@ -184,29 +191,50 @@
     });
   }
 
-  function load(items) {
-    data = items && items[DATA_KEY] ? items[DATA_KEY] : null;
-    if (data && data.qnas) {
-      data.qnas = data.qnas.filter(function (q) { return q && q.number != null; });
-      if (cur >= data.qnas.length) cur = 0;
+  // 어느 자소서를 띄울지는 jslRelayOn이 정한다 — 대시보드에서 마지막으로 누른 그 자소서다.
+  function pick(items) {
+    var on = items && items[ON_KEY];
+    if (!on) return null;
+    var docs = (items && items[DOCS_KEY]) || {};
+    var doc = docs[String(on)];
+    if (!doc || !Array.isArray(doc.qnas)) return null;
+    doc = Object.assign({}, doc);
+    doc.qnas = doc.qnas.filter(function (q) { return q && q.number != null; });
+    return doc.qnas.length ? doc : null;
+  }
+
+  function apply(next) {
+    if (!next) {                       // 꺼졌거나 스냅샷이 없다 — 막대를 걷는다
+      data = null;
+      if (mounted) { host.remove(); mounted = false; }
+      return;
     }
+    var changed = !data || data.resumeId !== next.resumeId;
+    data = next;
+    if (changed) { cur = 0; copied = {}; }
+    else if (cur >= data.qnas.length) cur = 0;
+    render();
+    if (!mounted) { document.documentElement.appendChild(host); mounted = true; }
+  }
+
+  function load(items) {
     var pos = items && items[POS_KEY];
     if (pos) { host.style.top = pos; host.style.transform = 'none'; }
-    render();
+    apply(pick(items));
   }
 
   try {
-    chrome.storage.local.get([DATA_KEY, POS_KEY], load);
-    // 자소설 쪽에서 답변을 고치면 이 막대도 따라 갱신된다.
-    chrome.storage.onChanged.addListener(function (changes, area) {
-      if (area !== 'local' || !changes[DATA_KEY]) return;
-      data = changes[DATA_KEY].newValue || null;
-      if (data && data.qnas && cur >= data.qnas.length) cur = 0;
-      render();
+    chrome.storage.local.get([DOCS_KEY, ON_KEY, POS_KEY], function (items) {
+      if (chrome.runtime.lastError) return;
+      load(items);
     });
-  } catch (e) {
-    render();
-  }
-
-  document.documentElement.appendChild(host);
+    // 켜고 끄기(jslRelayOn)와 답변 수정(jslRelayDocs) 둘 다 이 막대에 즉시 반영된다.
+    chrome.storage.onChanged.addListener(function (changes, area) {
+      if (area !== 'local' || (!changes[ON_KEY] && !changes[DOCS_KEY])) return;
+      chrome.storage.local.get([DOCS_KEY, ON_KEY], function (items) {
+        if (chrome.runtime.lastError) return;
+        apply(pick(items));
+      });
+    });
+  } catch (e) { /* 확장 컨텍스트 없음 — 아무것도 띄우지 않는다 */ }
 })();

@@ -91,3 +91,69 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   handle(message, sender).then(data => reply({ ok: true, ...data }), e => reply({ ok: false, error: e.message }));
   return true;
 });
+
+// ── 모든 탭에 뜨는 세로 복사 바 (relay) ──────────────────────────────
+// 켜기: 동적 콘텐츠 스크립트를 등록해 두면 그 뒤 여는 모든 탭에 자동 주입된다.
+//       이미 열려 있는 탭에는 한 번씩 직접 넣는다.
+// 끄기: 등록을 풀고 jslRelayOn을 비운다. 떠 있는 막대는 storage 변화를 보고 스스로 사라진다
+//       (탭마다 제거 스크립트를 쏘지 않아도 되고, 권한이 이미 걷힌 뒤에도 안전하다).
+const RELAY_ID = 'jsl-relay';
+const RELAY_ORIGINS = { origins: ['*://*/*'] };
+const relayInjectable = url => /^https?:\/\//.test(url || '');
+
+async function relayRegistered() {
+  try {
+    return (await chrome.scripting.getRegisteredContentScripts({ ids: [RELAY_ID] })).length > 0;
+  } catch { return false; }
+}
+
+async function relayEnable(resumeId) {
+  if (!(await chrome.permissions.contains(RELAY_ORIGINS))) return { needPermission: true };
+  await chrome.storage.local.set({ jslRelayOn: String(resumeId) });
+  const script = {
+    id: RELAY_ID,
+    js: ['src/features/relay-panel.js'],
+    matches: ['*://*/*'],
+    runAt: 'document_idle',
+    allFrames: false,
+    persistAcrossSessions: true
+  };
+  try {
+    if (await relayRegistered()) await chrome.scripting.updateContentScripts([script]);
+    else await chrome.scripting.registerContentScripts([script]);
+  } catch (e) { return { ok: false, error: e.message }; }
+  // 이미 열려 있는 탭은 등록만으로는 안 뜬다 — 새로고침을 기다리지 않게 한 번씩 넣는다.
+  const tabs = (await chrome.tabs.query({})).filter(t => relayInjectable(t.url));
+  await Promise.all(tabs.map(t =>
+    chrome.scripting.executeScript({ target: { tabId: t.id }, files: ['src/features/relay-panel.js'] })
+      .catch(() => { /* 넣을 수 없는 탭은 건너뛴다 */ })));
+  return { on: true, tabs: tabs.length };
+}
+
+async function relayDisable() {
+  await chrome.storage.local.set({ jslRelayOn: null });
+  try { if (await relayRegistered()) await chrome.scripting.unregisterContentScripts({ ids: [RELAY_ID] }); }
+  catch { /* 이미 없으면 그만 */ }
+  return { on: false };
+}
+
+chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if (!message?.type?.startsWith('relay:')) return;
+  (async () => {
+    if (message.type === 'relay:status') {
+      const granted = await chrome.permissions.contains(RELAY_ORIGINS);
+      const { jslRelayOn = null } = await chrome.storage.local.get('jslRelayOn');
+      return { granted, on: jslRelayOn };
+    }
+    if (message.type === 'relay:enable') return relayEnable(message.resumeId);
+    if (message.type === 'relay:disable') return relayDisable();
+    if (message.type === 'relay:options') { await chrome.runtime.openOptionsPage(); return { opened: true }; }
+    return {};
+  })().then(data => reply({ ok: true, ...data }), e => reply({ ok: false, error: e.message }));
+  return true;
+});
+
+// 권한이 회수되면(사용자가 chrome://extensions에서 직접 끄는 경우 포함) 등록도 같이 푼다.
+chrome.permissions.onRemoved.addListener(async () => {
+  if (!(await chrome.permissions.contains(RELAY_ORIGINS))) await relayDisable();
+});

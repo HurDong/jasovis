@@ -118,5 +118,12 @@
       ],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "optional_host_permissions": [
+    "*://*/*"
+  ],
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  }
 }

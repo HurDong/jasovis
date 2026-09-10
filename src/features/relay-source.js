@@ -1,21 +1,27 @@
-// 다른 사이트(기업 채용 플랫폼)에서 쓸 문항 스냅샷을 저장한다.
-// 여기서는 '보내는 쪽'만 맡는다 — 실제 패널은 relay-panel.js가 그 사이트에 주입된다.
-// 스냅샷은 chrome.storage.local 한 칸('jslRelay')만 쓰고, 열려 있는 자소서가 바뀌면 덮어쓴다.
-// 외부로 나가는 통신은 없다. 저장 위치도 로컬뿐이다 (PRIVACY.md).
+// 자소서 편집 페이지에서 '모든 탭에 복사 바' 기능의 보내는 쪽을 맡는다.
+//  1) 열려 있는 자소서의 문항 스냅샷을 자소서별로 저장한다 (jslRelayDocs).
+//  2) 대시보드에 켜기/끄기 버튼을 붙인다 (JSL.ui.addAction — dashboard.js는 건드리지 않는다).
+//
+// 탭을 여러 개 열어 두면 각 탭이 자기 자소서를 저장하고, 버튼을 누른 그 자소서가 화면에 뜬다.
+// "마지막에 연 것"이 아니라 "마지막에 누른 것"이라 헷갈리지 않는다.
+// 외부 통신은 없고 저장은 chrome.storage.local뿐이다 (PRIVACY.md).
 JSL.register('relay-source', function () {
   'use strict';
 
-  var KEY = 'jslRelay';
+  var DOCS = 'jslRelayDocs';
+  var ON = 'jslRelayOn';
+  var MAX_DOCS = 8;          // 오래된 자소서 스냅샷은 버린다
   var timer = null;
   var lastJson = '';
+  var myId = null;           // 이 탭이 들고 있는 자소서 id
+  var btn = null;
+  var relayOn = null;
 
-  // 편집 페이지 state에서 패널이 쓸 것만 추린다. 답변 본문은 복사용으로 필요하지만
-  // 패널이 화면에 그리지는 않는다(사용자 결정: 본문은 안 보여준다).
   function snapshot(state) {
     var qnas = [];
     for (var i = 0; i < state.qnas.length; i++) {
       var q = state.qnas[i];
-      if (!q) continue;
+      if (!q || q.number == null) continue;
       qnas.push({
         number: q.number,
         question: String(q.question || '').trim(),
@@ -33,28 +39,112 @@ JSL.register('relay-source', function () {
     };
   }
 
-  // state는 입력할 때마다 온다. 매번 쓰면 storage가 시끄러우니 잠깐 모았다가 한 번 쓴다.
-  function write(snap) {
-    var json = JSON.stringify(snap.qnas) + '|' + snap.resumeId + '|' + snap.title;
-    if (json === lastJson) return;   // 글자수만 흔들리는 재전송은 버린다
+  // state는 입력할 때마다 온다. 잠깐 모았다가 한 번 쓴다.
+  function store(snap) {
+    var json = JSON.stringify(snap.qnas) + '|' + snap.title;
+    if (json === lastJson) return;
     lastJson = json;
     if (timer) clearTimeout(timer);
     timer = setTimeout(function () {
       timer = null;
       try {
-        chrome.storage.local.set(Object.fromEntries([[KEY, snap]]));
-      } catch (e) { /* 확장 컨텍스트가 사라진 뒤의 호출 — 조용히 무시 */ }
+        chrome.storage.local.get(DOCS, function (res) {
+          if (chrome.runtime.lastError) return;
+          var docs = (res && res[DOCS]) || {};
+          docs[snap.resumeId] = snap;
+          // 최근 저장 순으로 잘라낸다
+          var ids = Object.keys(docs).sort(function (a, b) {
+            return (docs[b].savedAt || 0) - (docs[a].savedAt || 0);
+          });
+          for (var i = MAX_DOCS; i < ids.length; i++) delete docs[ids[i]];
+          var payload = {};
+          payload[DOCS] = docs;
+          chrome.storage.local.set(payload);
+        });
+      } catch (e) { /* 확장 컨텍스트 소멸 — 무시 */ }
     }, 400);
   }
 
+  // ── 대시보드 버튼 ───────────────────────────────────────────────
+  var LABEL_OFF = '모든 탭에 복사 바';
+  var LABEL_ON = '복사 바 끄기';
+
+  function paint() {
+    if (!btn) return;
+    var mine = relayOn != null && myId != null && String(relayOn) === String(myId);
+    btn.textContent = mine ? LABEL_ON : LABEL_OFF;
+    btn.classList.toggle('on', mine);
+    btn.title = mine
+      ? '모든 탭에서 이 자소서의 복사 바를 내린다'
+      : '브라우저의 모든 탭에 이 자소서의 복사 바를 띄운다';
+  }
+
+  function send(msg, done) {
+    try {
+      chrome.runtime.sendMessage(msg, function (res) {
+        void chrome.runtime.lastError;   // 서비스워커가 자고 있으면 조용히 넘긴다
+        done(res || {});
+      });
+    } catch (e) { done({}); }
+  }
+
+  function onClick() {
+    if (!myId) { JSL.emit('toast', { message: '자소서를 불러오는 중입니다.', kind: 'fail' }); return; }
+    var mine = relayOn != null && String(relayOn) === String(myId);
+    if (mine) {
+      send({ type: 'relay:disable' }, function () {
+        JSL.emit('toast', { message: '복사 바를 내렸습니다.' });
+      });
+      return;
+    }
+    send({ type: 'relay:enable', resumeId: myId }, function (res) {
+      if (res.needPermission) {
+        // 크롬은 확장 페이지에서만 권한을 물을 수 있다. 최초 1회만 여기로 보낸다.
+        JSL.emit('toast', {
+          message: '처음 한 번만 허용이 필요합니다.',
+          kind: 'fail',
+          sub: '방금 열린 설정 탭에서 “허용하기”를 눌러 주세요.'
+        });
+        send({ type: 'relay:options' }, function () { });
+        return;
+      }
+      if (!res.ok) { JSL.emit('toast', { message: '복사 바를 띄우지 못했습니다.', kind: 'fail' }); return; }
+      JSL.emit('toast', { message: '모든 탭에 복사 바를 띄웠습니다.' });
+    });
+  }
+
+  function mount() {
+    if (btn || !JSL.ui || !JSL.ui.addAction) return;
+    btn = JSL.ui.addAction(LABEL_OFF, onClick);
+    paint();
+  }
+
+  if (JSL.ui && JSL.ui.ready && JSL.ui.ready.then) {
+    JSL.ui.ready.then(function () { try { mount(); } catch (e) { /* 무시 */ } });
+  }
+
+  // 다른 탭에서 켜고 끄면 이 탭의 버튼 라벨도 따라간다.
+  try {
+    chrome.storage.local.get(ON, function (res) {
+      if (chrome.runtime.lastError) return;
+      relayOn = res && res[ON];
+      paint();
+    });
+    chrome.storage.onChanged.addListener(function (changes, area) {
+      if (area !== 'local' || !changes[ON]) return;
+      relayOn = changes[ON].newValue;
+      paint();
+    });
+  } catch (e) { /* 무시 */ }
+
   JSL.onState(function (state) {
     try {
-      // 목록 화면이나 스코프를 못 찾은 상태는 그냥 넘긴다. 이전 스냅샷은 지우지 않는다 —
-      // 자소설 탭을 닫고 채용 사이트에서 쓰는 게 이 기능의 본래 용도다.
       if (!state || state.page === 'list' || !Array.isArray(state.qnas) || !state.qnas.length) return;
       var snap = snapshot(state);
       if (!snap.resumeId || !snap.qnas.length) return;
-      write(snap);
+      myId = snap.resumeId;
+      store(snap);
+      paint();
     } catch (e) { /* 예외 전파 금지 */ }
   });
 });
