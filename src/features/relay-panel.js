@@ -1,10 +1,13 @@
-// 기업 채용 사이트 위에 띄우는 세로 복사 바 (시안 1안 — 폭 46px).
-// 팝업의 버튼이 chrome.scripting.executeScript로 이 파일을 그 탭에 한 번 주입한다.
-// activeTab 권한이라 아이콘을 누른 그 탭에만, 그 순간에만 접근한다.
+// 기업 채용 사이트 위에 띄우는 세로 복사 바 (구조 1안 + 디자인 A안).
+// 서비스워커가 registerContentScripts로 등록해 두면 모든 탭에서 이 파일이 돈다.
 //
 // 사이트 DOM은 읽지도 쓰지도 않는다 — 입력칸을 찾아 넣는 게 아니라 우리 막대만 얹는다.
 // 그래서 기업마다 따로 만들 필요가 없다. 붙여넣기는 사용자가 Ctrl+V로 한다.
 // 스타일 충돌을 막으려고 Shadow DOM 안에서만 그린다 (AGENTS.md).
+//
+// 번호를 누르면 그 문항이 바로 복사된다 — 고른 뒤 복사를 또 누르지 않는다.
+// 문항이 뭔지는 번호에 마우스를 올렸을 때 왼쪽에 뜨는 말풍선이 알려준다. 평소 폭은 48px 그대로다.
+// 색은 주황과 무채색만 쓴다. 복사한 번호는 색을 더하는 대신 면을 걷어 뒤로 물린다.
 (function () {
   'use strict';
 
@@ -19,77 +22,97 @@
 
   var host = document.createElement('div');
   host.id = HOST_ID;
-  // 사이트 CSS가 흘러들지 않게 한다. position/z-index만 우리가 정하고 나머지는 초기화.
+  // 사이트 CSS가 흘러들지 않게 한다. 위치만 우리가 정하고 나머지는 초기화.
   host.style.cssText = 'all:initial;position:fixed;z-index:2147483647;top:50%;right:0;transform:translateY(-50%)';
   var root = host.attachShadow({ mode: 'open' });
 
   root.innerHTML = [
     '<style>',
     ':host{all:initial}',
-    '*{box-sizing:border-box;margin:0;padding:0;font-family:Pretendard,-apple-system,"Segoe UI",system-ui,sans-serif}',
-    '.bar{display:flex;flex-direction:column;align-items:center;gap:5px;width:46px;padding:8px 7px;',
-    '  background:#fff;border:1px solid #ddd;border-right:0;border-radius:10px 0 0 10px;',
-    '  box-shadow:0 6px 26px rgba(0,0,0,.20),0 1px 3px rgba(0,0,0,.10);user-select:none}',
-    '.grip{width:100%;text-align:center;color:#c6c6c6;font-size:12px;line-height:1;letter-spacing:-2px;cursor:grab}',
+    '*{box-sizing:border-box;margin:0;padding:0;',
+    '  font-family:Pretendard,-apple-system,"Segoe UI",system-ui,sans-serif}',
+    '.wrap{position:relative}',
+    '.bar{display:flex;flex-direction:column;align-items:center;width:48px;',
+    '  background:#fff;border:1px solid #dedede;border-right:0;border-radius:14px 0 0 14px;',
+    '  box-shadow:0 4px 18px rgba(0,0,0,.10),0 1px 3px rgba(0,0,0,.07);user-select:none}',
+    // 손잡이 — 점 세 개보다 가로 선 두 줄이 "끌 수 있다"로 읽힌다
+    '.grip{display:flex;flex-direction:column;gap:2px;align-items:center;',
+    '  padding:9px 0 7px;cursor:grab;width:100%}',
     '.grip:active{cursor:grabbing}',
-    '.c{width:30px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px;',
-    '  border:1px solid #ddd;background:#fff;font-size:11px;font-weight:700;color:#777;cursor:pointer;',
-    '  font-variant-numeric:tabular-nums}',
-    '.c:hover{border-color:#bbb;color:#333}',
-    '.c.ok{background:#f5f5f5;border-color:#eee;color:#bcbcbc}',
-    '.c.cur{background:#ff6813;border-color:#ff6813;color:#fff}',
-    '.cp{width:30px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:7px;',
-    '  background:#ff6813;border:0;color:#fff;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.16)}',
-    '.cp:hover{background:#f05f0c}',
-    '.cp svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.2}',
-    '.cp.done{background:#1f7a4d}',
-    '.sep{width:22px;height:1px;background:#eee;flex:none}',
-    '.x{width:30px;height:22px;display:flex;align-items:center;justify-content:center;border:0;',
-    '  background:transparent;color:#bbb;font-size:12px;cursor:pointer;border-radius:6px}',
-    '.x:hover{background:#f5f5f5;color:#777}',
-    '.empty{width:100%;text-align:center;font-size:9.5px;line-height:1.5;color:#999;padding:2px 0}',
-    '.tip{position:absolute;right:52px;white-space:nowrap;background:#1e1e1e;color:#fff;font-size:11px;',
-    '  font-weight:700;padding:5px 9px;border-radius:6px;opacity:0;pointer-events:none;transition:opacity .12s}',
-    '.tip.on{opacity:1}',
+    '.grip i{display:block;width:13px;height:1.5px;border-radius:2px;background:#d2d2d2}',
+    '.chips{display:flex;flex-direction:column;gap:4px;padding:0 8px}',
+    // 기본은 옅은 면. 테두리를 쓰지 않아 다섯 개가 나란해도 시끄럽지 않다.
+    '.n{width:32px;height:30px;display:flex;align-items:center;justify-content:center;',
+    '  border:0;border-radius:9px;background:#f4f4f4;color:#8c8c8c;',
+    '  font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;cursor:pointer;',
+    '  transition:background-color .12s ease,color .12s ease}',
+    // 복사한 것은 색을 더하지 않고 면을 걷어 뒤로 물린다
+    '.n.done{background:transparent;color:#c8c8c8}',
+    '.n:hover{background:#ff6813;color:#fff;box-shadow:0 2px 8px rgba(255,104,19,.38)}',
+    '.n:focus-visible{outline:2px solid #ff6813;outline-offset:2px}',
+    '.x{width:34px;height:26px;display:flex;align-items:center;justify-content:center;',
+    '  margin:5px 0 6px;border:0;background:transparent;border-radius:7px;',
+    '  color:#c3c3c3;font-size:11px;cursor:pointer}',
+    '.x:hover{background:#f4f4f4;color:#767676}',
+    // 말풍선 — 흰 카드 + 꼬리. 어두운 사이트 위에서도 흰 카드가 제일 확실하다.
+    '.tip{position:absolute;right:56px;width:max-content;max-width:230px;',
+    '  background:#fff;border:1px solid #dedede;border-radius:11px;padding:10px 13px;',
+    '  box-shadow:0 10px 30px rgba(0,0,0,.13);pointer-events:none;opacity:0;',
+    '  transform:translateX(4px);transition:opacity .11s ease,transform .11s ease}',
+    '.tip.on{opacity:1;transform:translateX(0)}',
+    '.tip .q{font-size:12px;font-weight:700;color:#1a1a1a;line-height:1.45;letter-spacing:-.01em}',
+    '.tip .m{margin-top:5px;font-size:10.5px;color:#9a9a9a}',
+    '.tip .m b{color:#ff6813;font-weight:700}',
+    '.tip::after{content:"";position:absolute;right:-5px;top:14px;width:9px;height:9px;background:#fff;',
+    '  border-right:1px solid #dedede;border-top:1px solid #dedede;transform:rotate(45deg)}',
+    '@media (prefers-reduced-motion: reduce){.n,.tip{transition:none}}',
     '</style>',
-    '<div class="bar" part="bar"></div>',
-    '<div class="tip"></div>'
+    '<div class="wrap"><div class="bar"></div><div class="tip"></div></div>'
   ].join('');
 
   var bar = root.querySelector('.bar');
   var tip = root.querySelector('.tip');
   var data = null;
-  var cur = 0;          // 현재 문항 인덱스
-  var copied = {};      // 이번 세션에 복사한 문항 (회색 처리용)
+  var copied = {};      // 이번 세션에 복사한 문항 번호
   var mounted = false;
+  var tipTimer = null;
 
-  function showTip(text, y) {
-    tip.textContent = text;
-    tip.style.top = (y != null ? y : 8) + 'px';
+  function showTip(chip, titleText, metaHTML) {
+    tip.textContent = '';
+    var q = document.createElement('div');
+    q.className = 'q';
+    q.textContent = titleText;                 // 문항 제목은 사이트가 아니라 사용자 데이터 — textContent로만 넣는다
+    var m = document.createElement('div');
+    m.className = 'm';
+    m.innerHTML = metaHTML;                    // 우리가 만든 고정 문구뿐이다
+    tip.appendChild(q);
+    tip.appendChild(m);
+    // 꼬리가 그 번호를 정확히 가리키게 세로 위치를 맞춘다.
+    tip.style.top = (chip.offsetTop + chip.offsetHeight / 2 - 19) + 'px';
     tip.classList.add('on');
-    clearTimeout(showTip.t);
-    showTip.t = setTimeout(function () { tip.classList.remove('on'); }, 1400);
   }
 
-  function copyCurrent(btn) {
-    if (!data || !data.qnas[cur]) return;
-    var text = data.qnas[cur].answer || '';
-    var num = data.qnas[cur].number;
+  function hideTip() { tip.classList.remove('on'); }
+
+  function copyQna(q, chip) {
+    var text = q.answer || '';
+    var label = q.question || ('문항 ' + q.number);
     function ok() {
-      copied[num] = true;
-      btn.classList.add('done');
-      showTip(num + '번 복사됨 · Ctrl+V', btn.offsetTop);
-      setTimeout(function () { btn.classList.remove('done'); }, 900);
-      if (cur < data.qnas.length - 1) { cur += 1; render(); }  // 복사하면 다음 문항으로
-      else render();
+      copied[q.number] = true;
+      chip.classList.add('done');
+      showTip(chip, label, '<b>복사됨</b> · Ctrl+V로 붙여넣기');
+      clearTimeout(tipTimer);
+      tipTimer = setTimeout(hideTip, 1500);
     }
-    function fail() { showTip('복사 실패', btn.offsetTop); }
+    function fail() {
+      showTip(chip, '복사하지 못했습니다', '이 사이트가 클립보드를 막고 있습니다');
+      clearTimeout(tipTimer);
+      tipTimer = setTimeout(hideTip, 2200);
+    }
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(ok, function () { execFallback(text) ? ok() : fail(); });
-      } else {
-        execFallback(text) ? ok() : fail();
-      }
+        navigator.clipboard.writeText(text).then(ok, function () { if (execFallback(text)) ok(); else fail(); });
+      } else if (execFallback(text)) { ok(); } else { fail(); }
     } catch (e) { fail(); }
   }
 
@@ -108,72 +131,60 @@
     } catch (e) { return false; }
   }
 
-  var ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5h10"/></svg>';
-
   function render() {
     bar.textContent = '';
+    hideTip();
+
     var grip = document.createElement('div');
     grip.className = 'grip';
-    grip.textContent = '⋯';
-    grip.title = '끌어서 옮기기';
+    grip.title = '끌어서 위아래로 옮기기';
+    grip.appendChild(document.createElement('i'));
+    grip.appendChild(document.createElement('i'));
     bar.appendChild(grip);
     enableDrag(grip);
 
-    if (!data || !data.qnas.length) {
-      var e = document.createElement('div');
-      e.className = 'empty';
-      e.textContent = '자소설에서 자소서를 먼저 열어 주세요';
-      bar.appendChild(e);
-      bar.appendChild(closeBtn());
-      return;
-    }
-
-    data.qnas.forEach(function (q, i) {
-      var c = document.createElement('button');
-      c.type = 'button';
-      c.className = 'c' + (i === cur ? ' cur' : (copied[q.number] ? ' ok' : ''));
-      c.textContent = q.number;
-      c.title = q.question ? (q.number + '. ' + q.question) : ('문항 ' + q.number);
-      c.addEventListener('click', function () { cur = i; render(); });
-      bar.appendChild(c);
-
-      // 복사 버튼은 항상 '현재 문항' 바로 아래에 붙는다 — 위치가 문항 따라 움직이지만
-      // 지금 무엇을 복사하는지가 눈으로 붙어 보이는 쪽을 택했다(시안 1안).
-      if (i === cur) {
-        var cp = document.createElement('button');
-        cp.type = 'button';
-        cp.className = 'cp';
-        cp.innerHTML = ICON;
-        cp.title = (q.chars || 0) + '자 복사';
-        cp.addEventListener('click', function () { copyCurrent(cp); });
-        bar.appendChild(cp);
-        var s = document.createElement('div');
-        s.className = 'sep';
-        bar.appendChild(s);
-      }
+    var chips = document.createElement('div');
+    chips.className = 'chips';
+    data.qnas.forEach(function (q) {
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'n' + (copied[q.number] ? ' done' : '');
+      chip.textContent = q.number;
+      var label = q.question || ('문항 ' + q.number);
+      chip.setAttribute('aria-label', label + ' 복사');
+      chip.addEventListener('mouseenter', function () {
+        clearTimeout(tipTimer);
+        showTip(chip, label, (q.chars || 0) + '자 · <b>눌러서 복사</b>');
+      });
+      chip.addEventListener('mouseleave', function () {
+        clearTimeout(tipTimer);
+        tipTimer = setTimeout(hideTip, 80);
+      });
+      chip.addEventListener('click', function () { copyQna(q, chip); });
+      chips.appendChild(chip);
     });
-    bar.appendChild(closeBtn());
-  }
+    bar.appendChild(chips);
 
-  function closeBtn() {
     var x = document.createElement('button');
     x.type = 'button';
     x.className = 'x';
     x.textContent = '✕';
-    x.title = '닫기';
+    x.title = '모든 탭에서 복사 바 끄기';
     // ✕는 이 탭만이 아니라 전부 끈다 — 다른 탭의 막대는 storage 변화를 보고 스스로 사라진다.
     x.addEventListener('click', function () {
       try { chrome.runtime.sendMessage({ type: 'relay:disable' }, function () { void chrome.runtime.lastError; }); }
       catch (e) { /* 무시 */ }
       host.remove();
+      mounted = false;
     });
-    return x;
+    bar.appendChild(x);
   }
 
   // 드래그 이동 + 위치 기억. 세로만 옮긴다(오른쪽 가장자리에 붙는 모양을 유지).
   function enableDrag(handle) {
     handle.addEventListener('mousedown', function (down) {
       down.preventDefault();
+      hideTip();
       var startY = down.clientY;
       var startTop = host.getBoundingClientRect().top;
       function move(e) {
@@ -209,10 +220,8 @@
       if (mounted) { host.remove(); mounted = false; }
       return;
     }
-    var changed = !data || data.resumeId !== next.resumeId;
+    if (!data || data.resumeId !== next.resumeId) copied = {};   // 자소서가 바뀌면 복사 표시 초기화
     data = next;
-    if (changed) { cur = 0; copied = {}; }
-    else if (cur >= data.qnas.length) cur = 0;
     render();
     if (!mounted) { document.documentElement.appendChild(host); mounted = true; }
   }
