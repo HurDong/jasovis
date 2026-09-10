@@ -55,14 +55,17 @@
     '  color:#c3c3c3;font-size:11px;cursor:pointer}',
     '.x:hover{background:#f4f4f4;color:#767676}',
     // 말풍선 — 흰 카드 + 꼬리. 어두운 사이트 위에서도 흰 카드가 제일 확실하다.
-    '.tip{position:absolute;right:56px;width:max-content;max-width:230px;',
+    '.tip{position:absolute;right:56px;width:230px;max-width:calc(100vw - 64px);',
     '  background:#fff;border:1px solid #dedede;border-radius:11px;padding:10px 13px;',
     '  box-shadow:0 10px 30px rgba(0,0,0,.13);pointer-events:none;opacity:0;',
     '  transform:translateX(4px);transition:opacity .11s ease,transform .11s ease}',
     '.tip.on{opacity:1;transform:translateX(0)}',
-    '.tip .q{font-size:12px;font-weight:700;color:#1a1a1a;line-height:1.45;letter-spacing:-.01em}',
-    '.tip .m{margin-top:5px;font-size:10.5px;color:#9a9a9a}',
-    '.tip .m b{color:#ff6813;font-weight:700}',
+    // 문항 대조용 앞부분만 두 줄로 표시한다. 복사할 답변 원문은 줄이지 않는다.
+    '.tip .q{font-size:12px;font-weight:600;color:#1a1a1a;line-height:1.45;letter-spacing:-.01em;',
+    '  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;',
+    '  max-height:34.8px;overflow:hidden;overflow-wrap:anywhere}',
+    '.tip.status{width:max-content}',
+    '.tip.copied .q{color:#ff6813}',
     '.tip::after{content:"";position:absolute;right:-5px;top:14px;width:9px;height:9px;background:#fff;',
     '  border-right:1px solid #dedede;border-top:1px solid #dedede;transform:rotate(45deg)}',
     '@media (prefers-reduced-motion: reduce){.n,.tip{transition:none}}',
@@ -77,16 +80,14 @@
   var mounted = false;
   var tipTimer = null;
 
-  function showTip(chip, titleText, metaHTML) {
+  function showTip(chip, titleText, kind) {
     tip.textContent = '';
+    tip.classList.toggle('status', !!kind);
+    tip.classList.toggle('copied', kind === 'copied');
     var q = document.createElement('div');
     q.className = 'q';
-    q.textContent = titleText;                 // 문항 제목은 사이트가 아니라 사용자 데이터 — textContent로만 넣는다
-    var m = document.createElement('div');
-    m.className = 'm';
-    m.innerHTML = metaHTML;                    // 우리가 만든 고정 문구뿐이다
+    q.textContent = titleText.replace(/\s+/g, ' ').trim(); // 표시만 정리하고 사용자 데이터는 textContent로 넣는다
     tip.appendChild(q);
-    tip.appendChild(m);
     // 꼬리가 그 번호를 정확히 가리키게 세로 위치를 맞춘다.
     tip.style.top = (chip.offsetTop + chip.offsetHeight / 2 - 19) + 'px';
     tip.classList.add('on');
@@ -96,16 +97,15 @@
 
   function copyQna(q, chip) {
     var text = q.answer || '';
-    var label = q.question || ('문항 ' + q.number);
     function ok() {
       copied[q.number] = true;
       chip.classList.add('done');
-      showTip(chip, label, '<b>복사됨</b> · Ctrl+V로 붙여넣기');
+      showTip(chip, '복사됨', 'copied');
       clearTimeout(tipTimer);
       tipTimer = setTimeout(hideTip, 1500);
     }
     function fail() {
-      showTip(chip, '복사하지 못했습니다', '이 사이트가 클립보드를 막고 있습니다');
+      showTip(chip, '복사하지 못했습니다', 'error');
       clearTimeout(tipTimer);
       tipTimer = setTimeout(hideTip, 2200);
     }
@@ -154,7 +154,7 @@
       chip.setAttribute('aria-label', label + ' 복사');
       chip.addEventListener('mouseenter', function () {
         clearTimeout(tipTimer);
-        showTip(chip, label, (q.chars || 0) + '자 · <b>눌러서 복사</b>');
+        showTip(chip, label);
       });
       chip.addEventListener('mouseleave', function () {
         clearTimeout(tipTimer);
