@@ -238,12 +238,17 @@
     window.dispatchEvent(new CustomEvent('JSL_RES', { detail: res }));
   });
 
-  // 2초 주기 상태 브로드캐스트 (목록 페이지에서만)
-  setInterval(function () {
-    if (!isListPage()) return;
+  // 상태 브로드캐스트 (목록 페이지에서만).
+  // 예전에는 setInterval만 있어서 **첫 상태가 2초 뒤에야** 왔다. 기능들이 그때부터 하나씩
+  // 그려지느라 화면이 4~5초에 걸쳐 완성됐다. Angular가 뜨는 동안 촘촘히 두드리고,
+  // 상태가 잡히면 2초 주기로 눕는다 (2026-09-12).
+  function broadcast() {
+    if (!isListPage()) return false;
     const state = snapshot();
-    if (state) {
-      window.dispatchEvent(new CustomEvent('JSL_STATE', { detail: state }));
-    }
-  }, 2000);
+    if (!state) return false;
+    window.dispatchEvent(new CustomEvent('JSL_STATE', { detail: state }));
+    return true;
+  }
+  [0, 120, 300, 600, 1000, 1500].forEach(function (ms) { setTimeout(broadcast, ms); });
+  setInterval(broadcast, 2000);
 })();
