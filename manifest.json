@@ -111,6 +111,7 @@
         "src/features/list-layout.js",
         "src/features/list-menu.js",
         "src/features/list-stats.js",
+        "src/features/list-calendar.js",
         "src/features/list-sort.js",
         "src/features/watch.js",
         "src/features/checkpoint.js",
