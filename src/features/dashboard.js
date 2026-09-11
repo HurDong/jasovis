@@ -330,9 +330,30 @@
   // 등록 순서를 그대로 지켜 복사가 항상 붙여넣기 왼쪽에 온다(자리가 안 흔들리게).
   function appendQnaActions(parent, num, kind, stage) {
     var box = null;
+    function slot() {
+      if (!box) {
+        box = document.createElement('span');
+        box.className = 'qna-btns';
+        parent.appendChild(box);
+      }
+      return box;
+    }
     qnaActions.forEach(function (entry) {
       if (entry.number !== num) return;
-      if (entry.stages && entry.stages.indexOf(stage) === -1) return;
+      if (entry.stages && entry.stages.indexOf(stage) === -1) {
+        // 한 줄 카드에서는 자리를 비우지 않는다. 못 쓰는 동작도 잠긴 채로 남겨야
+        // 복사·붙여넣기 알약의 폭과 위치가 문항 상태에 따라 흔들리지 않는다.
+        if (kind !== 'ic') return;
+        var off = document.createElement('button');
+        off.className = 'copy-ic off';
+        off.innerHTML = entry.icon;
+        off.disabled = true;
+        off.tabIndex = -1;
+        off.setAttribute('aria-hidden', 'true');
+        off.title = (entry.title || entry.labelHTML || '') + ' — 이 문항에는 쓸 수 없어요';
+        slot().appendChild(off);
+        return;
+      }
       var solid = kind === 'btn' && entry.emphasis === 'primary';
       var b = document.createElement('button');
       if (solid) {
@@ -349,12 +370,7 @@
         runAndFlash(b, entry.onClick, e);
       });
       entry.el = b;
-      if (!box) {
-        box = document.createElement('span');
-        box.className = 'qna-btns';
-        parent.appendChild(box);
-      }
-      box.appendChild(b);
+      slot().appendChild(b);
     });
   }
 
@@ -408,7 +424,9 @@
 
       var st = document.createElement('span');
       st.className = 'st ' + s.stage;
-      st.textContent = s.stage === 'done' ? '✓' : num;
+      // 지나온 문항이라도 제한을 넘었으면 체크가 아니라 느낌표다. 활성 카드는 큰 글자수가
+      // 이미 초과를 말하므로 번호를 유지한다.
+      st.textContent = s.stage === 'done' ? (s.over ? '!' : '✓') : num;
       line.appendChild(st);
 
       var q = document.createElement('span');
@@ -974,7 +992,7 @@
         '.segbar{display:flex;gap:4px;}',
         '.seg{flex:1;height:7px;border-radius:3px;background:#efe1d0;overflow:hidden;}',
         '.seg-fill{height:100%;border-radius:3px;width:0;transition:width .4s ease;}',
-        '.seg-fill.done{background:#1d9e75;}',
+        '.seg-fill.done{background:#ffc79c;}',
         '.seg-fill.active{background:#ff6a00;}',
         '.seg-fill.empty{background:transparent;}',
         '.seg-fill.over{background:#ef4444;}',
@@ -984,7 +1002,7 @@
         '.chips{display:flex;gap:9px;flex-wrap:wrap;}',
         '.chip{display:inline-flex;align-items:center;gap:4px;font-weight:600;white-space:nowrap;}',
         '.chip i{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block;}',
-        '.chip.cdone{color:#0f6e56;}',
+        '.chip.cdone{color:#c4763a;}',
         '.chip.cwrite{color:#e05e00;}',
         '.chip.cempty{color:#a3937f;}',
         '.charcount{flex:none;color:#b7a793;}',
@@ -1008,12 +1026,15 @@
         // 상태 동그라미 (번호/체크) — 색+모양으로 단계 구분
         '.st{flex:none;width:19px;height:19px;border-radius:50%;display:flex;align-items:center;',
         '  justify-content:center;font-size:10.5px;font-weight:700;box-sizing:border-box;}',
-        '.st.empty{border:1.5px solid #dccbb6;color:#b0a08c;background:#fff;}',
+        '.st.empty{border:1.5px dashed #d7c9b8;color:#b0a08c;background:#fff;}',
         '.st.active{background:#ff6a00;color:#fff;}',
-        '.st.done{background:#1d9e75;color:#fff;font-size:11px;}',
+        '.st.done{background:#ffc79c;color:#fff;font-size:11px;}',
         // 지금 연 탭인데 아직 빈칸이면(active-empty) 링만 주황으로 "여기"를 표시
         '.card.cur.empty .st.empty{border-color:#ffb377;color:#e05e00;}',
         '.card.over .st.active{background:#ef4444;}',
+        // 한 줄 카드의 초과는 체크가 아니라 느낌표다 — 왼쪽 끝만 봐도 잡힌다.
+        '.card.over .st.done{background:#fff;color:#e03e3e;font-weight:800;font-size:12px;',
+        '  box-shadow:inset 0 0 0 2px #e03e3e;}',
         // 질문 텍스트 — 미작성이어도 또렷하게(흐림은 게이지/보조요소에만)
         '.q{flex:1;min-width:0;font-size:13px;color:#3d342c;',
         '  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
@@ -1024,14 +1045,18 @@
         '.cat{flex:none;font-size:9.5px;font-weight:700;color:#a86a2f;background:#fff0df;',
         '  border:1px solid #f6d9b6;padding:2px 7px;border-radius:6px;white-space:nowrap;}',
         // 한 줄 글자수
-        '.cnt{flex:none;font-size:11.5px;white-space:nowrap;}',
+        '.cnt{flex:none;font-size:14px;white-space:nowrap;font-variant-numeric:tabular-nums;}',
+        '.cnt b{font-weight:800;color:#2c251f;letter-spacing:-.02em;}',
+        '.cnt .dim{font-size:11px;}',
         '.cnt b{font-weight:700;}',
         '.cnt .dim{color:#c9bdb2;}',
-        '.cnt.done{color:#0f6e56;}',
-        '.cnt.done .dim{color:#9dc4b3;}',
+        '.cnt.done{color:#2c251f;}',
+        '.cnt.done .dim{color:#bcae9d;}',
         '.cnt.empty{color:#b7a793;}',
+        '.cnt.empty b{color:#c3b5a8;}',
         '.cnt.empty .dim{color:#d0c3b2;}',
-        '.cnt.over,.cnt.over b{color:#ef4444;font-weight:700;}',
+        '.cnt.over,.cnt.over b{color:#e03e3e;font-weight:800;}',
+        '.cnt.over .dim{color:#eaa9a9;}',
         // 작성중 확장줄 — 큰 글자수+복사가 한 줄(양끝 정렬), 채움막대는 그 아래 단독 줄
         '.act-row{display:flex;align-items:center;justify-content:space-between;gap:9px;',
         '  margin-top:10px;padding-left:29px;}',
@@ -1047,6 +1072,23 @@
         // 복사 — 작성중은 강조 버튼, 완료는 인라인 아이콘
         // 한 카드에 버튼이 둘(복사·붙여넣기) 이상 붙으므로 묶음으로 간격을 준다
         '.qna-btns{flex:none;display:inline-flex;align-items:center;gap:4px;}',
+        // 한 줄 카드의 복사·붙여넣기는 하나의 알약으로 붙인다. 요소는 하나로 보이고
+        // 타깃은 둘(41x34)이라, 지금 보고 있지 않은 문항도 부담 없이 복붙할 수 있다.
+        '.card.done .qna-btns,.card.empty .qna-btns{gap:0;border:1px solid #eadcce;',
+        '  border-radius:999px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(80,50,20,.05);}',
+        '.card.done .qna-btns .copy-ic,.card.empty .qna-btns .copy-ic{width:41px;height:34px;',
+        '  padding:0;align-items:center;justify-content:center;border-radius:0;color:#9b8a7b;}',
+        '.card.done .qna-btns .copy-ic + .copy-ic,.card.empty .qna-btns .copy-ic + .copy-ic{',
+        '  border-left:1px solid #f2e7db;}',
+        '.card.done .qna-btns .copy-ic:hover,.card.empty .qna-btns .copy-ic:hover{',
+        '  background:#ff6a00;color:#fff;}',
+        '.card.done .qna-btns .copy-ic:active,.card.empty .qna-btns .copy-ic:active{transform:none;}',
+        // 빈 문항은 복사할 답변이 없다. 자리를 비우지 않고 잠가 두어 도구 위치를 고정한다.
+        '.copy-ic.off{opacity:.3;cursor:default;}',
+        '.copy-ic.off:hover{background:transparent;color:#9b8a7b;}',
+        '.card.empty .qna-btns{border-color:#ffcfa8;}',
+        '.card.empty .qna-btns .copy-ic:not(.off){color:#d25400;}',
+        '.card.done .line,.card.empty .line{gap:8px;}',
         '.copy-btn{flex:none;display:inline-flex;align-items:center;gap:4px;border:0;cursor:pointer;',
         '  background:#ff6a00;color:#fff;font-size:11.5px;font-weight:700;font-family:inherit;',
         '  padding:5px 11px;border-radius:7px;transition:background .15s,transform .1s;}',
