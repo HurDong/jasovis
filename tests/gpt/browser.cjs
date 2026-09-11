@@ -31,6 +31,15 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'jsl-gpt-'));
     assert.equal(await target.evaluate(() => saves), 0);
     await gpt.locator('.code-copy').first().click(); assert.equal(await gpt.evaluate(() => copied), 1);
     console.log('PASS: natural 5-question response, all code languages, exact text, first connection, native copy, no save');
+
+    await gpt.getByRole('button', { name: '되돌리기', exact: true }).first().click();
+    await waitStatus('되돌림');
+    assert.deepEqual(await answers(), [1, 2, 3, 4, 5].map(n => '기존 ' + n));
+    assert.equal(await target.evaluate(() => saves), 0);
+    assert.equal(await gpt.getByRole('button', { name: '되돌리기', exact: true }).count(), 0);
+    await apply(); await waitStatus('문항 1, 2, 3, 4, 5 입력 확인');
+    assert.deepEqual(await answers(), F.answers);
+    console.log('PASS: undo restores the five answers before the write, consumes the button, and re-apply still works');
     if (process.env.JSL_GPT_SCREENSHOT) await gpt.locator('[data-jsl-gpt]').first().screenshot({path:process.env.JSL_GPT_SCREENSHOT});
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     const targetId = await worker.evaluate(async () => (await chrome.tabs.query({url:'https://jasoseol.com/resume/55'}))[0].id);

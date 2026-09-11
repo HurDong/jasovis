@@ -1,6 +1,15 @@
 'use strict';
 importScripts('gpt-protocol.js');
-const locks = new Set(), prepared = new Map();
+const locks = new Set(), prepared = new Map(), undos = new Map();
+// 되돌리기는 지원서 탭을 보고 와서 누르는 동작이라 준비 토큰보다 오래 남긴다.
+const UNDO_TTL = 600000;
+function remember(map, ttl, record) {
+  for (const [id, item] of map) if (item.expires < Date.now()) map.delete(id);
+  if (map.size >= 64) map.delete(map.keys().next().value);
+  const token = crypto.randomUUID();
+  map.set(token, { ...record, expires: Date.now() + ttl });
+  return token;
+}
 const key = id => 'gpt-conversation:' + id;
 const origin = sender => { try { return new URL(sender.url).origin; } catch { return ''; } };
 const resumeId = url => { try { return new URL(url).pathname.match(/^\/resume\/(\d+)\/?$/)?.[1]; } catch { return null; } };
@@ -71,13 +80,28 @@ async function handle(message, sender) {
       const mapped = JSLGpt.map(message.candidates, data.state, message.choices);
       if (!mapped.packet) return { mapping: { rows: mapped.rows, qnas: mapped.qnas } };
       await source(message, sender);
-      for (const [id, item] of prepared) if (item.expires < Date.now()) prepared.delete(id);
-      if (prepared.size >= 64) prepared.delete(prepared.keys().next().value);
-      const token = crypto.randomUUID();
-      prepared.set(token, { conversation, revision: link.revision, senderTab: sender.tab.id, response: message.response,
-        fingerprint: message.fingerprint, tabId: tab.id, explicitTab: message.tabId != null, documentKey: data.documentKey,
-        packet: mapped.packet, expires: Date.now() + 90000 });
+      const token = remember(prepared, 90000, { conversation, revision: link.revision, senderTab: sender.tab.id,
+        response: message.response, fingerprint: message.fingerprint, tabId: tab.id, explicitTab: message.tabId != null,
+        documentKey: data.documentKey, packet: mapped.packet });
       return { token, title: link.resume.title, numbers: mapped.packet.answers.map(a => a.number) };
+    }
+    if (message.type === 'gpt:undo') {
+      const undo = undos.get(message.token);
+      if (!undo || undo.expires < Date.now() || undo.conversation !== conversation || undo.senderTab !== sender.tab.id ||
+          undo.revision !== link.revision || undo.response !== message.response ||
+          undo.fingerprint !== message.fingerprint) throw Error('되돌리기 정보가 만료되거나 변경되었습니다. 자소설에서 직접 확인해 주세요.');
+      const undoLock = 'resume:' + link.resume.id;
+      if (locks.has(undoLock)) throw Error('같은 지원서에 다른 답변을 입력 중입니다.');
+      locks.add(undoLock);
+      try {
+        const fresh = await readTarget(undo.tabId);
+        if (fresh.documentKey !== undo.documentKey || !JSLGpt.sameQuestions(link, fresh.state)) throw Error('대상 지원서가 새로고침되거나 변경되었습니다. 자소설에서 직접 확인해 주세요.');
+        await source(message, sender);
+        const result = await chrome.tabs.sendMessage(undo.tabId, { type: 'gpt:undo', documentKey: undo.documentKey,
+          resumeId: link.resume.id, revert: undo.revert }, { frameId: 0 });
+        undos.delete(message.token); // 대상 탭까지 도달한 뒤에만 소모한다.
+        return { ...result, target: { tabId: undo.tabId, resumeId: link.resume.id } };
+      } finally { locks.delete(undoLock); }
     }
     if (message.type !== 'gpt:apply') throw Error('알 수 없는 요청입니다.');
     const pending = prepared.get(message.token);
@@ -95,7 +119,13 @@ async function handle(message, sender) {
       await source(message, sender);
       const result = await chrome.tabs.sendMessage(pending.tabId, { type: 'gpt:write', packet: pending.packet,
         documentKey: pending.documentKey }, { frameId: 0 });
-      return { ...result, target: { tabId: pending.tabId, resumeId: link.resume.id } };
+      // 실제로 값이 바뀐 문항만 되돌릴 거리가 된다. expectedAnswer가 입력 직전 답변이다.
+      const revert = pending.packet.answers.filter(a => (result?.verified || []).includes(a.number) && a.text !== a.expectedAnswer)
+        .map(a => ({ id: a.id, number: a.number, question: a.question, text: a.expectedAnswer, wrote: a.text }));
+      const undoToken = revert.length ? remember(undos, UNDO_TTL, { conversation, revision: link.revision,
+        senderTab: sender.tab.id, response: message.response, fingerprint: message.fingerprint, tabId: pending.tabId,
+        documentKey: pending.documentKey, revert }) : null;
+      return { ...result, target: { tabId: pending.tabId, resumeId: link.resume.id }, undoToken };
     } finally { locks.delete(resumeLock); }
   } finally { locks.delete(lock); }
 }

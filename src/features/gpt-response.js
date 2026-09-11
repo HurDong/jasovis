@@ -83,8 +83,13 @@
     entry.statusSub.textContent = detail || '';
     entry.statusSub.hidden = !detail;
   }
+  // 입력 결과에 딸린 확인·되돌리기는 그 입력에만 유효하다. 연결·재적용 때 함께 버린다.
+  function clearResult(entry) {
+    entry.review.hidden = true; entry.reviewTarget = null;
+    entry.undo.hidden = true; entry.undoTarget = null;
+  }
   function linkText(entry, link) {
-    if (entry.link?.revision !== link?.revision) { entry.review.hidden = true; entry.reviewTarget = null; }
+    if (entry.link?.revision !== link?.revision) clearResult(entry);
     entry.link = link;
     entry.resumeTitle.textContent = link ? link.resume.title : '연결된 지원서 없음';
     entry.connected.title = link ? '연결: ' + link.resume.title : '이 대화에 연결된 지원서 없음';
@@ -159,7 +164,7 @@
   }
   async function apply(entry, tabId, choices = {}, expected) {
     const snapshot = await sourceCheck(entry, expected);
-    entry.review.hidden = true; entry.reviewTarget = null;
+    clearResult(entry);
     entry.choices.replaceChildren(); setStatus(entry, 'busy', '지원서와 문항 확인 중…');
     const info = await send(entry, 'gpt:info', {}, snapshot.fingerprint); linkText(entry, info.link);
     if (!info.link) { chooseTargets(entry, info, true, snapshot.fingerprint); return; }
@@ -171,6 +176,8 @@
     const applied = await send(entry, 'gpt:apply', { revision: info.link.revision, token: result.token }, snapshot.fingerprint);
     entry.reviewTarget = applied.target ? { target: applied.target, revision: info.link.revision, fingerprint: snapshot.fingerprint } : null;
     entry.review.hidden = !entry.reviewTarget;
+    entry.undoTarget = applied.undoToken ? { token: applied.undoToken, revision: info.link.revision, fingerprint: snapshot.fingerprint } : null;
+    entry.undo.hidden = !entry.undoTarget;
     if (applied.error) setStatus(entry, 'attn', applied.error);
     else if (applied.headline) setStatus(entry, applied.applied ? 'ok' : 'attn', applied.headline, applied.detail);
     else setStatus(entry, 'attn', applied.status || '입력 결과 확인 불가', '지원서에서 현재 내용을 확인해 주세요.');
@@ -189,8 +196,19 @@
       await send(entry, 'gpt:focus', { target: review.target, revision: review.revision }, review.fingerprint);
     }));
     entry.review.hidden = true;
+    entry.undo = button('되돌리기', () => task(entry, async () => {
+      const undo = entry.undoTarget;
+      if (!undo) return;
+      setStatus(entry, 'busy', '입력 직전 내용으로 되돌리는 중…');
+      const result = await send(entry, 'gpt:undo', { revision: undo.revision, token: undo.token }, undo.fingerprint);
+      entry.undoTarget = null; entry.undo.hidden = true;
+      setStatus(entry, result.applied ? 'ok' : 'attn', result.headline || '되돌리기 결과 확인 불가', result.detail);
+    }));
+    entry.undo.hidden = true;
     const statusBody = el('div', null, 'jsl-gpt-body');
-    statusBody.append(entry.statusLine, entry.statusSub, entry.review);
+    const resultActions = el('div', null, 'jsl-gpt-result');
+    resultActions.append(entry.review, entry.undo);
+    statusBody.append(entry.statusLine, entry.statusSub, resultActions);
     entry.status.append(entry.glyph, statusBody);
     entry.connected = el('span', null, 'jsl-gpt-chip');
     entry.dot = el('span', '', 'jsl-gpt-dot'); entry.resumeTitle = el('b', '');

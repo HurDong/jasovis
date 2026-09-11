@@ -34,7 +34,8 @@
 [data-jsl-gpt] .jsl-gpt-line { overflow-wrap: anywhere; }
 [data-jsl-gpt] .jsl-gpt-sub { margin-top: 2px; font-size: 12px; opacity: .7; overflow-wrap: anywhere; }
 [data-jsl-gpt] .jsl-gpt-sub[hidden] { display: none; }
-[data-jsl-gpt] .jsl-gpt-body > button { margin-top: 8px; }
+[data-jsl-gpt] .jsl-gpt-result { display: flex; flex-wrap: wrap; gap: 8px; }
+[data-jsl-gpt] .jsl-gpt-result > button { margin-top: 8px; }
 
 /* 선택 목록 */
 [data-jsl-gpt] .jsl-gpt-choices { display: grid; gap: 8px; margin-top: 10px; }

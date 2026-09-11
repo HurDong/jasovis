@@ -4,7 +4,7 @@ const P = require('../../src/core/gpt-protocol');
 function fixture() {
   const storage = {}, state = { resume: { id: 55, title: '예시기업' }, qnas: [{ id: 91, number: 1, question: '지원 동기', answer: '기존' }] };
   const targetTabs = [{ id: 2, url: 'https://jasoseol.com/resume/55', title: '예시기업', windowId: 1 }];
-  const flags = { sourceValid: true, documentKey: 'doc1', writes: 0, focusedTabs: [], focusedWindows: [], beforeWrite: null, reads: 0, beforeRead: null };
+  const flags = { sourceValid: true, documentKey: 'doc1', writes: 0, focusedTabs: [], focusedWindows: [], beforeWrite: null, reads: 0, beforeRead: null, undos: 0 };
   let listener;
   const chrome = { permissions: { onRemoved: { addListener() {} } }, storage: { local: {
     get: async key => ({ [key]: storage[key] }), set: async values => Object.assign(storage, structuredClone(values)), remove: async key => { delete storage[key]; }
@@ -19,7 +19,18 @@ function fixture() {
         if (flags.beforeWrite) await flags.beforeWrite();
         P.validate(message.packet, state, true); flags.writes++;
         state.qnas[0].answer = message.packet.answers[0].text;
-        return { applied: true, status: '입력 확인' };
+        return { applied: true, status: '입력 확인', verified: message.packet.answers.map(a => a.number) };
+      }
+      if (message.type === 'gpt:undo') {
+        flags.undos++;
+        const reverted = [], kept = [];
+        for (const item of message.revert) {
+          const qna = state.qnas.find(q => String(q.id) === String(item.id));
+          // 우리가 써넣은 값이 그대로 남은 문항만 되돌린다 — gpt-connect와 같은 규칙.
+          if (!qna || (qna.answer || '') !== item.wrote) { kept.push(item.number); continue; }
+          qna.answer = item.text; reverted.push(item.number);
+        }
+        return { reverted, kept, applied: reverted.length > 0 && !kept.length };
       }
     }
   }, windows: { update: async (id, changes) => { flags.focusedWindows.push({id, ...changes}); } }, runtime: { onMessage: { addListener: fn => { if (!listener) listener = fn; } } } };
@@ -30,6 +41,35 @@ function fixture() {
   const prepare = async (link, extra = {}) => send('gpt:prepare', { revision: link.revision, candidates: [{ key: '0', number: 1, question: '지원 동기', text: '새 답변' }], ...extra });
   return { flags, storage, state, targetTabs, send, connect, prepare };
 }
+test('되돌리기는 입력 직전 답변으로 돌리고 토큰은 한 번만 쓴다', async () => {
+  const f = fixture(), link = await f.connect(), p = await f.prepare(link);
+  const applied = await f.send('gpt:apply', { revision: link.revision, token: p.token });
+  assert.equal(applied.applied, true); assert.equal(f.state.qnas[0].answer, '새 답변'); assert.ok(applied.undoToken);
+  const undone = await f.send('gpt:undo', { revision: link.revision, token: applied.undoToken });
+  assert.deepEqual(undone.reverted, [1]); assert.equal(f.state.qnas[0].answer, '기존'); assert.equal(f.flags.undos, 1);
+  const again = await f.send('gpt:undo', { revision: link.revision, token: applied.undoToken });
+  assert.equal(again.ok, false); assert.match(again.error, /만료되거나 변경/); assert.equal(f.flags.undos, 1);
+});
+test('되돌리기는 사용자가 직접 고친 문항을 건드리지 않는다', async () => {
+  const f = fixture(), link = await f.connect(), p = await f.prepare(link);
+  const applied = await f.send('gpt:apply', { revision: link.revision, token: p.token });
+  f.state.qnas[0].answer = '직접 수정';
+  const undone = await f.send('gpt:undo', { revision: link.revision, token: applied.undoToken });
+  assert.deepEqual(undone.kept, [1]); assert.equal(undone.applied, false); assert.equal(f.state.qnas[0].answer, '직접 수정');
+});
+test('연결·발신 응답·문서·대상 변경 뒤에는 되돌리지 않는다', async () => {
+  for (const kind of ['link', 'source', 'document', 'response', 'target']) {
+    const f = fixture(), link = await f.connect(), p = await f.prepare(link);
+    const applied = await f.send('gpt:apply', { revision: link.revision, token: p.token });
+    if (kind === 'link') await f.connect();
+    if (kind === 'source') f.flags.sourceValid = false;
+    if (kind === 'document') f.flags.documentKey = 'doc2';
+    if (kind === 'target') f.targetTabs[0].url = 'https://jasoseol.com/resume/56';
+    const r = await f.send('gpt:undo', { revision: link.revision, token: applied.undoToken,
+      ...(kind === 'response' ? { response: 'response2' } : {}) });
+    assert.equal(r.ok, false, kind); assert.equal(f.flags.undos, 0, kind); assert.equal(f.state.qnas[0].answer, '새 답변', kind);
+  }
+});
 test('준비 토큰 단회 사용과 변경된 기존 답변 보호', async () => {
   const f = fixture(), link = await f.connect(), p = await f.prepare(link);
   f.state.qnas[0].answer = '사용자가 수정';
