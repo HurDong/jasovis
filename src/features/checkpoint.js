@@ -652,7 +652,13 @@ JSL.register('checkpoint', function () {
   // 전환이 느리거나 Angular가 포커스를 한 번 걷어가는 경우까지 버틸 여유를 준다.
   // 끝내 못 넣으면 조용히 포기한다(사이트 기본 동작을 막지 않는다).
   var FOCUS_TIMEOUT_MS = 3000;
+  var FOCUS_STABLE_MS = 120;
   var focusTimer = null;
+
+  function cancelAnswerFocus() {
+    if (focusTimer !== null) clearTimeout(focusTimer);
+    focusTimer = null;
+  }
 
   function focusAnswerNow(wantNumber) {
     if (wantNumber != null && activeNumber !== wantNumber) return false;
@@ -683,23 +689,48 @@ JSL.register('checkpoint', function () {
     if (document.activeElement !== ta) return false;
     // 하이라이트 갱신은 오버레이가 실제로 이 textarea에 붙었을 때만 의미가 있다.
     if (currentTa === ta) {
+      focused = true;    // 같은 DOM을 재사용하면 focus 이벤트가 다시 발생하지 않을 수 있다.
       onInteract();      // 하이라이트 갱신 (+ 같은 위치로 저장)
       scrollMarkIntoView();
     }
-    return true;
+    return ta;
   }
 
   JSL.on('focus:answer', function (payload) {
     var wantNumber = payload && payload.number != null ? Number(payload.number) : null;
     var deadline = Date.now() + FOCUS_TIMEOUT_MS;
-    if (focusTimer) { clearTimeout(focusTimer); focusTimer = null; } // 연타 시 이전 대기는 버린다
+    var candidate = null;
+    var stableSince = 0;
+    var stableTicks = 0;
+    cancelAnswerFocus(); // 연타 시 이전 대기는 버린다
     (function tick() {
       focusTimer = null;
       try {
-        if (focusAnswerNow(wantNumber)) return;
+        // focus 직후의 동기 검사만으로 끝내면 다음 렌더에서 숨김/교체된 노드에
+        // 성공 판정이 남는다. 후속 tick에서도 같은 답변란이 보이고 포커스돼야 끝낸다.
+        var visible = findVisibleAnswerTa();
+        if (candidate && candidate === visible && candidate.offsetParent !== null &&
+            document.activeElement === candidate &&
+            (wantNumber == null || activeNumber === wantNumber)) {
+          stableTicks++;
+          if (stableTicks >= 4 && Date.now() - stableSince >= FOCUS_STABLE_MS) return;
+        } else {
+          candidate = focusAnswerNow(wantNumber) || null;
+          stableSince = Date.now();
+          stableTicks = 0;
+        }
       } catch (e) { /* 무시 */ }
       if (Date.now() < deadline) focusTimer = setTimeout(tick, FOCUS_POLL_MS);
     })();
+  });
+
+  // 명시적인 사용자 조작 이후에는 포커스를 다시 빼앗지 않는다. window capture는
+  // document의 hotkeys보다 먼저 실행되므로 새 Alt+숫자 요청 자체는 취소하지 않는다.
+  window.addEventListener('keydown', cancelAnswerFocus, true);
+  window.addEventListener('pointerdown', cancelAnswerFocus, true);
+  window.addEventListener('blur', cancelAnswerFocus);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible') cancelAnswerFocus();
   });
 
   loadOffsets();

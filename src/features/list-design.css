@@ -94,10 +94,15 @@ html.jsl-fit .resume-order-by li:hover { color: var(--jsl-ink); }
 #jsl-track .jsl-link { flex: 0 0 auto; width: 30px; margin-left: auto; margin-right: auto; display: flex; align-items: center; justify-content: center; }
 #jsl-track .jsl-bd { display: flex; align-items: center; gap: 13px; min-width: 0; padding-left: 14px; }
 /* 숫자와 구성 막대를 나란히 둔다. 세로로 쌓으면 넓은 칸 왼쪽 끝에 몰려 보인다. */
-#jsl-track .jsl-entry .jsl-bd { display: flex; align-items: center; gap: 60px; flex: 0 0 auto; padding-right: 28px; }
+#jsl-track .jsl-entry .jsl-bd { display: flex; align-items: center; gap: clamp(16px, 3vw, 60px); flex: 1 1 0; padding-right: 16px; }
 #jsl-track .jsl-sum { flex: 0 0 auto; }
 /* 큰 숫자의 무게중심이 아래쪽이라 막대를 조금 내려야 나란해 보인다. */
-#jsl-track .jsl-mix { flex: 0 0 auto; width: 470px; margin-top: 20px; }
+#jsl-track .jsl-mix { flex: 1 1 0; min-width: 0; max-width: 470px; margin-top: 20px; }
+#jsl-track .jsl-meta { min-width: 0; overflow-wrap: anywhere; }
+/* 보드의 실제 폭으로 정해지는 compact 상태를 공유한다 (채팅 패널 포함).
+   게이지와 설명을 쌓아 좁은 전형 칸에서도 옆 칸을 침범하지 않는다. */
+html.jsl-fit.jsl-compact #jsl-track .jsl-tn:not(.jsl-entry) .jsl-bd { flex: 1 1 0; flex-direction: column; align-items: flex-start; gap: 6px; }
+html.jsl-fit.jsl-compact #jsl-track .jsl-entry .jsl-bd { gap: 16px; }
 #jsl-track .jsl-k { font-size: 11px; color: var(--jsl-dim); }
 #jsl-track .jsl-k b { font-weight: 600; color: var(--jsl-muted); }
 #jsl-track .jsl-big { font-size: 26px; font-weight: 700; letter-spacing: -.02em; color: var(--jsl-ink-strong); font-variant-numeric: tabular-nums; line-height: 1.25; }
