@@ -39,6 +39,22 @@ test('표시 공백·줄바꿈·명시적 제한 정규화, 실제 내용 차이
   assert.equal(packet.answers[0].question, questions[1]);
   assert.equal(packet.answers[0].text, '  답변\n');
 });
+test('복합 글자 수 안내와 문장부호 차이는 흡수하고 공백·내용 차이는 구분', () => {
+  for (const suffix of [' (최소 500자, 최대 2,000자 입력가능)', ' (500자~1000자)', ' (최대 2000바이트 입력 가능)', ' (1,000자 이내, 공백 포함)']) {
+    assert.equal(P.normalizeQuestion(questions[1] + suffix), questions[1]);
+  }
+  assert.equal(P.questionKey('지원 동기를 작성하십시오!'), P.questionKey(questions[1]));
+  for (const other of ['지원동기를 작성하십시오.', '지원 경험을 작성하십시오.', questions[1] + ' (금융 분야)']) {
+    assert.notEqual(P.questionKey(other), P.questionKey(questions[1]));
+  }
+  assert.notEqual(P.questionKey('아버지 가방'), P.questionKey('아버지가 방'));
+  // 사이트는 마침표 없이 괄호를 붙이고 글자 수를 덧붙이는데, GPT는 마침표와 공백을 넣어 다시 적는다.
+  const asked = '지원직무 역량과 그 역량을 갖추기 위한 노력을 작성해주세요(프로젝트/기타경험 등) (최소 500자, 최대 2,000자 입력가능)';
+  const one = { resume: { id: 77, title: '예시기업 IT 운영' }, qnas: [{ id: 91, number: 1, question: asked, answer: '' }] };
+  const packet = P.map(P.parse([h('문항 1'), t('문항 원문: 지원직무 역량과 그 역량을 갖추기 위한 노력을 작성해주세요. (프로젝트/기타경험 등)'), c('가상 답변')]), one).packet;
+  assert.equal(packet.answers[0].id, '91');
+  assert.equal(packet.answers[0].question, asked);
+});
 test('번호·질문 충돌 및 없는 질문은 사용자 선택까지 보류', () => {
   const candidates = P.parse([h('문항 1'), t('질문: ' + questions[1]), c('답변')]);
   assert.equal(P.map(candidates, state).packet, null);

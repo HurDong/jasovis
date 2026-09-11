@@ -11,10 +11,17 @@
   function normalizeQuestion(text) {
     // 끝의 명시적인 글자 수 메타만 제거한다. 숫자·문장부호·단어는 보존한다.
     let s = String(text || '').replace(/\u00a0/g, ' ').trim();
-    const limit = '(?:(?:공백\\s*(?:포함|제외)|최대|최소)\\s*)?\\d[\\d,]*\\s*(?:자|bytes?)(?:\\s*(?:이내|이상|이하))?(?:\\s*[,·/]?\\s*공백\\s*(?:포함|제외))?';
+    // 한 덩어리의 수치 제한. 사이트는 '최소 500자, 최대 2,000자 입력가능'처럼 여러 덩어리를 잇기도 한다.
+    const one = '(?:(?:공백\\s*(?:포함|제외)|최대|최소)\\s*)?\\d[\\d,]*\\s*(?:자|바이트|bytes?)(?:\\s*(?:이내|이상|이하))?(?:\\s*[,·/]?\\s*공백\\s*(?:포함|제외))?';
+    const limit = one + '(?:\\s*[,·/~∼〜-]?\\s*' + one + ')*(?:\\s*(?:입력|작성)\\s*가능)?';
     s = s.replace(new RegExp('\\s*[（(\\[]\\s*' + limit + '\\s*[）)\\]]\\s*$', 'i'), '');
     s = s.replace(new RegExp('\\s*(?:글자\\s*수\\s*제한|분량)\\s*[:：]\\s*' + limit + '\\s*$', 'i'), '');
     return s.replace(/\s+/g, ' ').trim();
+  }
+  function questionKey(text) {
+    // 대응 비교 전용 키. 문장부호·기호는 지우지 않고 공백으로 바꿔, GPT가 마침표나 괄호 간격을
+    // 바꿔 적어도 같은 문항으로 본다. 공백 자체는 없애지 않는다 ('아버지 가방'과 '아버지가 방'은 다르다).
+    return normalizeQuestion(text).replace(/[\p{P}\p{S}ㆍ]/gu, ' ').replace(/\s+/g, ' ').trim();
   }
   function questionHeading(text) {
     return /^(?:문항\s*(\d+)|(\d+)\s*번\s*(?:문항)?|Q\s*(\d+))(?=\s|[.:：)\-]|$)/i.exec(text.trim());
@@ -73,7 +80,8 @@
     const { qnas } = metadata(state);
     const rows = candidates.map(candidate => {
       const byNumber = qnas.find(q => q.number === candidate.number);
-      const byQuestion = candidate.question ? qnas.filter(q => normalizeQuestion(q.question) === normalizeQuestion(candidate.question)) : [];
+      const wanted = candidate.question ? questionKey(candidate.question) : '';
+      const byQuestion = wanted ? qnas.filter(q => questionKey(q.question) === wanted) : [];
       let target = null, reason = '';
       if (candidate.question) {
         if (byQuestion.length === 1 && (candidate.number === null || byNumber?.id === byQuestion[0].id)) target = byQuestion[0];
@@ -116,6 +124,6 @@
     }
     return packet;
   }
-  root.JSLGpt = { conversation, normalizeQuestion, parse, metadata, sameQuestions, map, validate };
+  root.JSLGpt = { conversation, normalizeQuestion, questionKey, parse, metadata, sameQuestions, map, validate };
   if (typeof module !== 'undefined') module.exports = root.JSLGpt;
 })(globalThis);
