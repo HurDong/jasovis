@@ -44,11 +44,24 @@ JSL.register('gpt-connect', function () {
       JSL.getState().then(state => reply({ state, documentKey }), () => reply({ state: null, documentKey }));
       return true;
     }
-    if (message.type !== 'gpt:write' && message.type !== 'gpt:undo') return;
+    if (message.type !== 'gpt:write' && message.type !== 'gpt:undo' && message.type !== 'gpt:review-question') return;
     (async function () {
       if (busy) throw Error('다른 답변을 입력 중입니다.');
       busy = true;
       try {
+        if (message.type === 'gpt:review-question') {
+          if (message.documentKey !== documentKey || !onResume(message.resumeId)) throw Error('대상 지원서가 이동했습니다.');
+          const expected = message.question;
+          const matches = state => state?.qnas?.find(q => String(q.id) === String(expected?.id) &&
+            q.number === expected.number && q.question === expected.question);
+          if (!matches(await JSL.getState())) throw Error('확인할 문항이 변경되었습니다. 지원서에서 직접 확인해 주세요.');
+          const switched = await JSL.action('switchQna', { number: expected.number });
+          await new Promise(resolve => setTimeout(resolve, 120));
+          const active = matches(await JSL.getState());
+          if (!onResume(message.resumeId) || !switched?.ok || !active?.active) throw Error('지원서 탭은 열었지만 해당 문항으로 이동하지 못했습니다.');
+          JSL.emit('focus:answer', { number: expected.number });
+          return { focused: true };
+        }
         if (message.type === 'gpt:undo') return await revert(message);
         const packet = message.packet;
         if (message.documentKey !== documentKey || !validPage(packet)) throw Error('대상 지원서가 이동했습니다. 다시 적용해 주세요.');

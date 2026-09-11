@@ -16,15 +16,49 @@
     const limit = one + '(?:\\s*[,·/~∼〜-]?\\s*' + one + ')*(?:\\s*(?:입력|작성)\\s*가능)?';
     s = s.replace(new RegExp('\\s*[（(\\[]\\s*' + limit + '\\s*[）)\\]]\\s*$', 'i'), '');
     s = s.replace(new RegExp('\\s*(?:글자\\s*수\\s*제한|분량)\\s*[:：]\\s*' + limit + '\\s*$', 'i'), '');
+    // 단위가 없어도 최소/최대가 모두 명시된 끝의 범위는 사이트 분량 메타다.
+    s = s.replace(/\s*[（(\[]\s*최소\s*\d[\d,]*\s*[~∼〜-]\s*최대\s*\d[\d,]*\s*[）)\]]\s*$/, '');
     return s.replace(/\s+/g, ' ').trim();
   }
-  function questionKey(text) {
+  function questionKey(text, number = null) {
     // 대응 비교 전용 키. 문장부호·기호는 지우지 않고 공백으로 바꿔, GPT가 마침표나 괄호 간격을
     // 바꿔 적어도 같은 문항으로 본다. 공백 자체는 없애지 않는다 ('아버지 가방'과 '아버지가 방'은 다르다).
-    return normalizeQuestion(text).replace(/[\p{P}\p{S}ㆍ]/gu, ' ').replace(/\s+/g, ' ').trim();
+    let s = normalizeQuestion(text);
+    // 번호 메타와 일치하는 명시적 접두사만 비교에서 제외한다. 소수·연도·본문 숫자는 보존한다.
+    const prefix = /^(?:(?:문항\s*|Q\s*)(\d+)(?:\s*[:：.)]\s*|\s+)|(\d+)\s*번(?:\s*문항)?(?:\s*[:：.)]\s*|\s+)|\((\d+)\)\s*|\[(\d+)\]\s*|(\d+)[.)]\s+)(?=\S)/i.exec(s);
+    if (prefix && Number(prefix.slice(1).find(x => x !== undefined)) === number) s = s.slice(prefix[0].length);
+    return s.replace(/[\p{P}\p{S}ㆍ]/gu, ' ').replace(/\s+/g, ' ').trim();
   }
   function questionHeading(text) {
     return /^(?:문항\s*(\d+)|(\d+)\s*번\s*(?:문항)?|Q\s*(\d+))(?=\s|[.:：)\-]|$)/i.exec(text.trim());
+  }
+  function detailedQuestion(text, number) {
+    const s = normalizeQuestion(text);
+    const split = /^(.*?(?:서술|기술|작성|설명)해\s*주세요)\s*[.!。]\s*([^]+)$/.exec(s);
+    if (!split) return null;
+    const main = questionKey(split[1].replace(/해\s+주세요/g, '해주세요'), number);
+    if (main.length < 30) return null;
+    const detail = split[2].trim();
+    // 바깥 괄호는 작성 지침을 감싼다. 그 안의 짧은 예시 괄호만 선택적으로 제외한다.
+    let reduced = detail;
+    if (detail.startsWith('(') && detail.endsWith(')')) {
+      let depth = 0, balanced = true;
+      for (let i = 0; i < detail.length; i++) {
+        if (detail[i] === '(') depth++;
+        if (detail[i] === ')') depth--;
+        if (depth < 0 || (depth === 0 && i < detail.length - 1)) balanced = false;
+      }
+      if (!balanced || depth !== 0) return null;
+      reduced = '(' + detail.slice(1, -1).replace(/\(([^()]{1,80})\)/g, (whole, inner) =>
+        (/(?:등\s*$|\/)/.test(inner) && !/필수|제외|금지|반드시/.test(inner)) ? '' : whole) + ')';
+    }
+    const key = value => questionKey(value).replace(/\s/g, '');
+    return { main, full: key(detail), reduced: key(reduced) };
+  }
+  function detailedMatch(a, b) {
+    if (!a || !b || a.main !== b.main || !a.full || !b.full) return false;
+    // 둘 다 서로 다른 예시를 생략해 일치시키지는 않는다. 한쪽 원문과 다른 쪽 축약형이 같아야 한다.
+    return a.full === b.full || a.full === b.reduced || a.reduced === b.full;
   }
   function parse(blocks) {
     const result = [];
@@ -80,8 +114,14 @@
     const { qnas } = metadata(state);
     const rows = candidates.map(candidate => {
       const byNumber = qnas.find(q => q.number === candidate.number);
-      const wanted = candidate.question ? questionKey(candidate.question) : '';
-      const byQuestion = wanted ? qnas.filter(q => questionKey(q.question) === wanted) : [];
+      let byQuestion = candidate.question ? qnas.filter(q => {
+        const wanted = questionKey(candidate.question, candidate.number ?? q.number);
+        return wanted && questionKey(q.question, q.number) === wanted;
+      }) : [];
+      if (!byQuestion.length && candidate.question && byNumber) {
+        const detail = detailedQuestion(candidate.question, candidate.number);
+        byQuestion = qnas.filter(q => detailedMatch(detail, detailedQuestion(q.question, q.number)));
+      }
       let target = null, reason = '';
       if (candidate.question) {
         if (byQuestion.length === 1 && (candidate.number === null || byNumber?.id === byQuestion[0].id)) target = byQuestion[0];

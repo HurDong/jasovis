@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const P = require('../../src/core/gpt-protocol');
+const { detailedPairs } = require('./fixtures.cjs');
 const questions = ['현재의 자신을 기술하십시오.', '지원 동기를 작성하십시오.', '관심 분야를 설명하십시오.', '문제를 해결한 경험은?', '추가로 알리고 싶은 내용은?'];
 const state = { resume: { id: 55, title: '예시기업 ICT' }, qnas: questions.map((question, i) => ({ id: 91 + i, number: i + 1, question, answer: '기존 ' + (i + 1) })) };
 const h = (text, level = 3) => ({ type: 'heading', text, level });
@@ -55,6 +56,53 @@ test('복합 글자 수 안내와 문장부호 차이는 흡수하고 공백·�
   assert.equal(packet.answers[0].id, '91');
   assert.equal(packet.answers[0].question, asked);
 });
+test('문항 번호 접두사의 표시 차이는 양쪽에서 흡수하고 원문 보존', () => {
+  for (const prefix of ['2. ', '2) ', '(2) ', '[2] ', '문항 2: ', '2번 문항: ', 'Q2. ']) {
+    const numbered = structuredClone(state);
+    numbered.qnas[1].question = prefix + questions[1] + ' (500자)';
+    const packet = P.map(P.parse(question(2)), numbered).packet;
+    assert.equal(packet.answers[0].question, numbered.qnas[1].question);
+    assert.equal(packet.answers[0].text, '[제목 2]\n\n  본문\t그대로\n');
+    const candidates = P.parse([h('문항 2'), t('질문: ' + prefix + questions[1]), c('답변')]);
+    assert.equal(P.map(candidates, state).packet.answers[0].id, '92');
+    candidates[0].number = null;
+    assert.equal(P.map(candidates, state).packet.answers[0].id, '92');
+  }
+});
+
+test('접두사 번호 충돌·본문 숫자·중복 질문은 자동 대응으로 우회하지 않음', () => {
+  for (const prefix of ['1. ', '3) ', '문항 1: ', 'Q3. ', '2.5 ', '2026. ', '2가지 ']) {
+    const candidates = P.parse([h('문항 2'), t('질문: ' + prefix + questions[1]), c('답변')]);
+    assert.equal(P.map(candidates, state).packet, null, prefix);
+    const numbered = structuredClone(state);
+    numbered.qnas[1].question = prefix + questions[1];
+    assert.equal(P.map(P.parse(question(2)), numbered).packet, null, prefix);
+  }
+  const duplicate = structuredClone(state);
+  duplicate.qnas[0].question = '1. ' + questions[1];
+  duplicate.qnas[1].question = '2. ' + questions[1];
+  assert.equal(P.map(P.parse(question(2)), duplicate).packet, null);
+  assert.equal(P.map(P.parse([h('문항 1'), t('질문: 2. ' + questions[1]), c('답변')]), state).packet, null);
+});
+
+test('단위 없는 최소/최대와 긴 질문의 중첩 예시 생략에 대응', () => {
+  const detailed = { resume: { id: 55 }, qnas: detailedPairs.map((pair, i) => ({ id: 91 + i, number: i + 1, question: pair.source, answer: '' })) };
+  const candidates = detailedPairs.map((pair, i) => ({ key: String(i), number: i + 1, question: pair.response, text: '가상 답변\n' }));
+  const packet = P.map(candidates, detailed).packet;
+  assert.deepEqual(packet.answers.map(a => a.question), detailedPairs.map(p => p.source));
+  assert.ok(packet.answers.every(a => a.text === '가상 답변\n'));
+  for (const question of [candidates[0].question.replace('성장 계획을', '보상 계획을'), candidates[0].question.replace('배운 역량', '부족한 역량')]) {
+    assert.equal(P.map([{ ...candidates[0], question }], detailed).packet, null);
+  }
+  assert.equal(P.map([{ ...candidates[0], number: 2 }], detailed).packet, null);
+  assert.equal(P.map([{ ...candidates[0], number: null }], detailed).packet, null);
+  const duplicate = structuredClone(detailed); duplicate.qnas[1].question = duplicate.qnas[0].question;
+  assert.equal(P.map([candidates[0]], duplicate).packet, null);
+  const changed = structuredClone(detailed); changed.qnas[0].question = changed.qnas[0].question.replace('지식/기술 등', '필수 지식/기술');
+  assert.equal(P.map([candidates[0]], changed).packet, null);
+  assert.equal(P.normalizeQuestion('범위 설명 (700 ~ 1,000)'), '범위 설명 (700 ~ 1,000)');
+});
+
 test('번호·질문 충돌 및 없는 질문은 사용자 선택까지 보류', () => {
   const candidates = P.parse([h('문항 1'), t('질문: ' + questions[1]), c('답변')]);
   assert.equal(P.map(candidates, state).packet, null);

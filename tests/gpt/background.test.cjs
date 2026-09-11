@@ -14,6 +14,7 @@ function fixture() {
     create: async ({ url }) => ({ id: 99, url }),
     sendMessage: async (id, message) => {
       if (message.type === 'gpt:source-check') return { valid: flags.sourceValid };
+      if (message.type === 'gpt:review-question') { flags.reviewQuestion = message.question; return { focused: true }; }
       if (message.type === 'gpt:state') { flags.reads++; if (flags.beforeRead) await flags.beforeRead(); return { state: structuredClone(state), documentKey: flags.documentKey }; }
       if (message.type === 'gpt:write') {
         if (flags.beforeWrite) await flags.beforeWrite();
@@ -128,6 +129,8 @@ test('확인 버튼은 실제 적용 탭과 그 창을 선택하고 추가 입�
   assert.equal(result.target.tabId, 3);
   const focused = await f.send('gpt:focus', { revision: link.revision, target: result.target });
   assert.equal(focused.focused, true);
+  assert.equal(f.flags.reviewQuestion.number, 1);
+  assert.equal(f.flags.reviewQuestion.id, '91');
   assert.deepEqual(f.flags.focusedTabs, [{id:3,active:true}]);
   assert.deepEqual(f.flags.focusedWindows, [{id:9,focused:true}]);
   assert.equal(f.flags.writes, 1);

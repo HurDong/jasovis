@@ -68,6 +68,12 @@ async function handle(message, sender) {
       await source(message, sender);
       await chrome.tabs.update(tab.id, { active: true });
       await chrome.windows.update(tab.windowId, { focused: true });
+      if (target.question) {
+        const fresh = await readTarget(tab.id);
+        const result = await chrome.tabs.sendMessage(tab.id, { type: 'gpt:review-question', resumeId: target.resumeId,
+          documentKey: fresh.documentKey, question: target.question }, { frameId: 0 });
+        if (!result?.focused) throw Error(result?.error || '지원서 탭은 열었지만 해당 문항으로 이동하지 못했습니다.');
+      }
       return { focused: true };
     }
     if (message.type === 'gpt:prepare') {
@@ -125,7 +131,9 @@ async function handle(message, sender) {
       const undoToken = revert.length ? remember(undos, UNDO_TTL, { conversation, revision: link.revision,
         senderTab: sender.tab.id, response: message.response, fingerprint: message.fingerprint, tabId: pending.tabId,
         documentKey: pending.documentKey, revert }) : null;
-      return { ...result, target: { tabId: pending.tabId, resumeId: link.resume.id }, undoToken };
+      const reviewQuestion = pending.packet.answers.find(a => (result?.verified || []).includes(a.number)) || pending.packet.answers[0];
+      return { ...result, target: { tabId: pending.tabId, resumeId: link.resume.id,
+        question: { id: reviewQuestion.id, number: reviewQuestion.number, question: reviewQuestion.question } }, undoToken };
     } finally { locks.delete(resumeLock); }
   } finally { locks.delete(lock); }
 }
