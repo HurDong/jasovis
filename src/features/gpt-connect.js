@@ -27,10 +27,14 @@ JSL.register('gpt-connect', function () {
         globalThis.JSLGpt.validate(packet, state);
         const verified = packet.answers.filter(a => state.qnas.find(q => String(q.id) === String(a.id)).answer === a.text).map(a => a.number);
         const applied = result.ok && verified.length === packet.answers.length;
-        const status = applied ? '문항 ' + verified.join(', ') + ' 입력 확인 · 저장 버튼은 누르지 않았습니다.' :
-          (result.ok ? '반영 불일치 · ' : '입력 처리 오류 · ') + '입력 확인 ' + verified.length + '/' + packet.answers.length + '문항 · 지원서에서 현재 내용을 확인해 주세요.';
+        // headline/detail은 ChatGPT 패널이 두 줄로 나눠 쓴다. status는 토스트 한 줄이라 기존 문장을 유지한다.
+        const headline = applied ? '문항 ' + verified.join(', ') + ' 입력 확인' :
+          (result.ok ? '반영 불일치' : '입력 처리 오류') + ' · 입력 확인 ' + verified.length + '/' + packet.answers.length + '문항';
+        const detail = applied ? '저장 버튼은 누르지 않았습니다. 지원서에서 확인하고 직접 저장하세요.' :
+          '지원서에서 현재 내용을 확인해 주세요.';
+        const status = applied ? headline + ' · 저장 버튼은 누르지 않았습니다.' : headline + ' · ' + detail;
         JSL.emit('toast', { message: status, kind: applied ? 'ok' : 'fail' });
-        return { verified, total: packet.answers.length, status, applied };
+        return { verified, total: packet.answers.length, status, headline, detail, applied };
       } finally { busy = false; }
     })().then(reply, e => reply({ applied: false, error: e.message }));
     return true;

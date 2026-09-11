@@ -62,20 +62,20 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'jsl-gpt-'));
     console.log('PASS: out-of-order partial revision and conversation binding persists on reload');
 
     await replace(F.block(1, { question: F.questions[1], answer: '충돌 후보' }));
-    await apply(); await waitStatus('자동으로 대응할 수 없는');
+    await apply(); await waitStatus('자동으로 맞추지 못');
     assert.notEqual((await answers())[0], '충돌 후보');
     await gpt.getByRole('combobox').selectOption('92');
     await gpt.getByRole('button', { name: '선택한 문항에 적용' }).click();
     await waitStatus('문항 2 입력 확인'); assert.equal((await answers())[1], '충돌 후보');
     await replace(F.block(2, { answer: '후보 A' }) + F.block(2, { answer: '후보 B' }));
-    await apply(); await waitStatus('자동으로 대응할 수 없는');
+    await apply(); await waitStatus('자동으로 맞추지 못');
     await gpt.getByRole('combobox').nth(0).selectOption('skip'); await gpt.getByRole('combobox').nth(1).selectOption('92');
     await gpt.getByRole('button', { name: '선택한 문항에 적용' }).click();
     await waitStatus('문항 2 입력 확인'); assert.equal((await answers())[1], '후보 B');
     console.log('PASS: conflicting question and duplicate candidates wait for explicit mapping');
 
     await replace(F.block(1, { question: F.questions[1], answer: '선택 중인 응답' }));
-    await apply(); await waitStatus('자동으로 대응할 수 없는');
+    await apply(); await waitStatus('자동으로 맞추지 못');
     await gpt.getByRole('combobox').selectOption('92');
     await gpt.locator('code').first().evaluate(node => { node.textContent = '재생성되어 달라진 응답'; });
     await gpt.getByRole('button', { name: '선택한 문항에 적용' }).click();

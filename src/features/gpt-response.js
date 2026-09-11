@@ -74,18 +74,30 @@
     const node = el('button', label, className); node.type = 'button';
     node.addEventListener('click', action); return node;
   }
+  // 진행 중·완료·주의를 글자가 아니라 상자 모양으로 구분한다. tone: busy | ok | attn.
+  function setStatus(entry, tone, text, detail) {
+    entry.status.hidden = !text;
+    entry.status.dataset.tone = text ? tone || 'plain' : '';
+    entry.glyph.textContent = tone === 'ok' ? '✓' : tone === 'attn' ? '!' : '';
+    entry.statusLine.textContent = text || '';
+    entry.statusSub.textContent = detail || '';
+    entry.statusSub.hidden = !detail;
+  }
   function linkText(entry, link) {
     if (entry.link?.revision !== link?.revision) { entry.review.hidden = true; entry.reviewTarget = null; }
     entry.link = link;
-    entry.connected.textContent = link ? '연결: ' + link.resume.title : '이 대화에 연결된 지원서 없음';
+    entry.resumeTitle.textContent = link ? link.resume.title : '연결된 지원서 없음';
+    entry.connected.title = link ? '연결: ' + link.resume.title : '이 대화에 연결된 지원서 없음';
+    entry.dot.hidden = !link;
+    entry.connected.classList.toggle('jsl-gpt-off', !link);
     entry.change.hidden = !link; entry.unlink.hidden = !link;
   }
   async function task(entry, fn) {
-    if (busy) { entry.status.textContent = '다른 응답의 입력을 처리 중입니다.'; return; }
+    if (busy) { setStatus(entry, 'attn', '다른 응답의 입력을 처리 중입니다.'); return; }
     busy = true;
     document.querySelectorAll('[data-jsl-gpt] button').forEach(b => { b.disabled = true; });
     try { await fn(); }
-    catch (e) { if (entry.panel.isConnected) entry.status.textContent = e.message; }
+    catch (e) { if (entry.panel.isConnected) setStatus(entry, 'attn', e.message); }
     finally {
       busy = false;
       document.querySelectorAll('[data-jsl-gpt] button').forEach(b => { b.disabled = false; });
@@ -94,32 +106,51 @@
   function chooseTargets(entry, info, connect, expected, applyAfter = true) {
     entry.choices.replaceChildren();
     const tabs = connect ? info.targets : info.targets.filter(t => t.resumeId === entry.link?.resume.id);
-    entry.status.textContent = tabs.length ? (connect ? '이 대화에 연결할 지원서를 선택해 주세요.' : '입력할 지원서 탭을 선택해 주세요.') : '지원서 탭이 없습니다. 지원서를 연 뒤 다시 적용해 주세요.';
+    if (tabs.length) setStatus(entry, 'attn', connect ? '이 대화에 연결할 지원서를 선택해 주세요.' : '입력할 지원서 탭을 선택해 주세요.');
+    else setStatus(entry, 'attn', '열린 지원서 탭이 없습니다.', '지원서를 연 뒤 다시 적용해 주세요.');
     for (const tab of tabs) entry.choices.append(button((tab.title || '지원서') + ' · 창 ' + tab.windowId + ' / 탭 ' + tab.id, () => task(entry, async () => {
       await sourceCheck(entry, expected);
       if (connect) linkText(entry, (await send(entry, 'gpt:connect', { tabId: tab.id }, expected)).link);
       if (applyAfter) await apply(entry, tab.id, {}, expected);
-      else { entry.choices.replaceChildren(); entry.status.textContent = '연결을 변경했습니다. 이 응답을 입력하려면 자소설에 적용을 눌러 주세요.'; }
+      else { entry.choices.replaceChildren(); setStatus(entry, 'ok', '연결을 변경했습니다.', '이 응답을 입력하려면 자소설에 적용을 눌러 주세요.'); }
     })));
     if (!tabs.length) entry.choices.append(button(connect ? '지원서 목록 열기' : '연결된 지원서 열기', () => task(entry, async () => {
       await send(entry, 'gpt:open', { list: connect }, expected);
-      entry.status.textContent = '지원서가 준비되면 이 응답의 자소설에 적용을 다시 눌러 주세요.';
+      setStatus(entry, 'attn', '지원서를 열었습니다.', '준비되면 이 응답의 자소설에 적용을 다시 눌러 주세요.');
     })));
   }
   function chooseMapping(entry, mapping, tabId, expected) {
-    entry.choices.replaceChildren(); entry.status.textContent = '자동으로 대응할 수 없는 답변이 있습니다. 대상 또는 제외를 선택해 주세요.';
+    entry.choices.replaceChildren();
+    const pending = mapping.rows.filter(row => !row.target).length;
+    setStatus(entry, 'attn', '답변 ' + pending + '개를 자동으로 맞추지 못했습니다.', '대상 문항을 고르거나 제외하세요.');
     const selects = [];
-    for (const row of mapping.rows) {
+    for (const [index, row] of mapping.rows.entries()) {
       const item = el('div', null, 'jsl-gpt-candidate');
-      item.append(el('strong', row.candidate.number ? '응답 문항 ' + row.candidate.number : '번호 없는 답변'));
-      if (row.candidate.question) item.append(el('div', row.candidate.question));
-      if (row.reason) item.append(el('div', row.reason, 'jsl-gpt-muted'));
-      const detail = el('details'); detail.append(el('summary', '답변 내용 확인'), el('pre', row.candidate.text)); item.append(detail);
-      const select = el('select'); select.setAttribute('aria-label', '답변 후보 ' + (Number(row.candidate.key) + 1) + '의 대상 문항');
+      const head = el('div', null, 'jsl-gpt-card-head');
+      head.append(el('span', row.candidate.number ? '응답 문항 ' + row.candidate.number : '번호 없는 답변', 'jsl-gpt-badge'));
+      if (mapping.rows.length > 1) head.append(el('span', (index + 1) + ' / ' + mapping.rows.length, 'jsl-gpt-count'));
+      item.append(head);
+      if (row.candidate.question) item.append(el('div', row.candidate.question, 'jsl-gpt-muted'));
+      if (row.reason) item.append(el('div', row.reason, 'jsl-gpt-reason'));
+      // 접어 두지 않는다. 어떤 답변을 어디에 넣는지가 선택의 근거다.
+      const preview = el('pre', row.candidate.text, 'jsl-gpt-preview');
+      const more = button('전체 보기', () => {
+        const open = preview.classList.toggle('jsl-gpt-open');
+        more.textContent = open ? '접기' : '전체 보기';
+        more.setAttribute('aria-expanded', String(open));
+      }, 'jsl-gpt-more');
+      more.setAttribute('aria-expanded', 'false');
+      item.append(preview, more);
+      const select = el('select');
       for (const [value, label] of [['', '대상 문항 선택'], ['skip', '이 답변 제외'], ...mapping.qnas.map(q => [q.id, '문항 ' + q.number + ' · ' + q.question])]) {
         const option = el('option', label); option.value = value; select.append(option);
       }
-      select.value = row.target || ''; item.append(select); selects.push([row.candidate.key, select]); entry.choices.append(item);
+      select.value = row.target || '';
+      const label = el('label', null, 'jsl-gpt-label');
+      label.append(el('span', '대상 문항'), select);
+      item.append(label); selects.push([row.candidate.key, select]); entry.choices.append(item);
+      // 두 줄 안에 다 보이면 펼칠 것이 없다.
+      requestAnimationFrame(() => { if (preview.scrollHeight <= preview.clientHeight + 1) more.hidden = true; });
     }
     entry.choices.append(button('선택한 문항에 적용', () => task(entry, async () => {
       if (selects.some(([, select]) => !select.value)) throw Error('각 답변의 대상 문항 또는 제외를 선택해 주세요.');
@@ -129,44 +160,56 @@
   async function apply(entry, tabId, choices = {}, expected) {
     const snapshot = await sourceCheck(entry, expected);
     entry.review.hidden = true; entry.reviewTarget = null;
-    entry.choices.replaceChildren(); entry.status.textContent = '지원서와 문항 확인 중…';
+    entry.choices.replaceChildren(); setStatus(entry, 'busy', '지원서와 문항 확인 중…');
     const info = await send(entry, 'gpt:info', {}, snapshot.fingerprint); linkText(entry, info.link);
     if (!info.link) { chooseTargets(entry, info, true, snapshot.fingerprint); return; }
     const result = await send(entry, 'gpt:prepare', { revision: info.link.revision, candidates: snapshot.candidates, choices,
       ...(tabId == null ? {} : { tabId }) }, snapshot.fingerprint);
     if (result.chooseTab) { chooseTargets(entry, result, false, snapshot.fingerprint); return; }
     if (result.mapping) { chooseMapping(entry, result.mapping, tabId, snapshot.fingerprint); return; }
-    entry.status.textContent = result.title + ' · 문항 ' + result.numbers.join(', ') + ' 입력 중…';
+    setStatus(entry, 'busy', result.title + ' · 문항 ' + result.numbers.join(', ') + ' 입력 중…');
     const applied = await send(entry, 'gpt:apply', { revision: info.link.revision, token: result.token }, snapshot.fingerprint);
     entry.reviewTarget = applied.target ? { target: applied.target, revision: info.link.revision, fingerprint: snapshot.fingerprint } : null;
     entry.review.hidden = !entry.reviewTarget;
-    entry.status.textContent = applied.error || applied.status || '입력 결과 확인 불가 · 지원서에서 현재 내용을 확인해 주세요.';
+    if (applied.error) setStatus(entry, 'attn', applied.error);
+    else if (applied.headline) setStatus(entry, applied.applied ? 'ok' : 'attn', applied.headline, applied.detail);
+    else setStatus(entry, 'attn', applied.status || '입력 결과 확인 불가', '지원서에서 현재 내용을 확인해 주세요.');
   }
   function attach(message, turn, body) {
     const panel = el('div'); panel.dataset.jslGpt = 'true';
     const entry = { id: crypto.randomUUID(), conversation: current, panel, message, turn };
     panel.dataset.jslGptResponse = entry.id;
-    entry.status = el('div', '', 'jsl-gpt-status'); entry.status.setAttribute('role', 'status');
+    entry.status = el('div', null, 'jsl-gpt-status'); entry.status.setAttribute('role', 'status'); entry.status.hidden = true;
+    entry.glyph = el('span', '', 'jsl-gpt-glyph'); entry.glyph.setAttribute('aria-hidden', 'true');
+    entry.statusLine = el('div', '', 'jsl-gpt-line');
+    entry.statusSub = el('div', '', 'jsl-gpt-sub'); entry.statusSub.hidden = true;
     entry.review = button('자소설에서 확인 ↗', () => task(entry, async () => {
       const review = entry.reviewTarget;
       if (!review) return;
       await send(entry, 'gpt:focus', { target: review.target, revision: review.revision }, review.fingerprint);
     }));
     entry.review.hidden = true;
-    entry.connected = el('span', '', 'jsl-gpt-muted'); entry.choices = el('div', null, 'jsl-gpt-choices');
-    entry.change = button('연결 변경', () => task(entry, async () => {
+    const statusBody = el('div', null, 'jsl-gpt-body');
+    statusBody.append(entry.statusLine, entry.statusSub, entry.review);
+    entry.status.append(entry.glyph, statusBody);
+    entry.connected = el('span', null, 'jsl-gpt-chip');
+    entry.dot = el('span', '', 'jsl-gpt-dot'); entry.resumeTitle = el('b', '');
+    entry.connected.append(entry.dot, entry.resumeTitle);
+    entry.choices = el('div', null, 'jsl-gpt-choices');
+    entry.change = button('변경', () => task(entry, async () => {
       const snapshot = await sourceCheck(entry);
       const info = await send(entry, 'gpt:info', {}, snapshot.fingerprint);
       chooseTargets(entry, info, true, snapshot.fingerprint, false);
-    }));
-    entry.unlink = button('연결 해제', () => task(entry, async () => {
-      await send(entry, 'gpt:unlink'); entry.choices.replaceChildren(); linkText(entry, null); entry.status.textContent = '이 대화의 연결을 해제했습니다.';
-    }));
+    }), 'jsl-gpt-quiet');
+    entry.change.setAttribute('aria-label', '연결 변경');
+    entry.unlink = button('해제', () => task(entry, async () => {
+      await send(entry, 'gpt:unlink'); entry.choices.replaceChildren(); linkText(entry, null);
+      setStatus(entry, 'ok', '이 대화의 연결을 해제했습니다.');
+    }), 'jsl-gpt-quiet');
+    entry.unlink.setAttribute('aria-label', '연결 해제');
     const actions = el('div', null, 'jsl-gpt-actions');
     actions.append(button('자소설에 적용', () => task(entry, () => apply(entry)), 'jsl-gpt-primary'), entry.connected, entry.change, entry.unlink);
-    const result = el('div', null, 'jsl-gpt-result');
-    result.append(entry.status, entry.review);
-    panel.append(actions, result, entry.choices);
+    panel.append(actions, entry.status, entry.choices);
     // article 전체가 아니라 markdown과 같은 부모/폭에 둔다.
     if (body === message) message.append(panel); else body.after(panel);
     entries.set(entry.id, entry); linkText(entry, null);

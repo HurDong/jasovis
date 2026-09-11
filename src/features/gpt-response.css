@@ -3,17 +3,55 @@
 [data-jsl-gpt] button, [data-jsl-gpt] select { font: inherit; color: inherit; border: 1px solid #8886; border-radius: 8px; background: transparent; padding: 7px 10px; cursor: pointer; }
 [data-jsl-gpt] button:hover { background: #8881; }
 [data-jsl-gpt] button:disabled { opacity: .55; cursor: wait; }
-[data-jsl-gpt] button.jsl-gpt-primary { background: #ff6b0015; color: #b34300; border-color: #ff6b0070; font-weight: 650; }
 [data-jsl-gpt] button[hidden] { display: none; }
 [data-jsl-gpt] :focus-visible { outline: 2px solid #ff6b00; outline-offset: 2px; }
 [data-jsl-gpt] .jsl-gpt-muted { opacity: .72; overflow-wrap: anywhere; }
-[data-jsl-gpt] .jsl-gpt-status:not(:empty), [data-jsl-gpt] .jsl-gpt-choices:not(:empty) { margin-top: 9px; }
-[data-jsl-gpt] .jsl-gpt-choices { display: grid; gap: 8px; }
+
+/* 주 동작 하나만 채운 주황으로 둔다. 선택 화면이 열리면 아래 '선택한 문항에 적용'에 강조를 넘긴다. */
+[data-jsl-gpt] button.jsl-gpt-primary { background: #ff6b00; color: #1b1b1b; border-color: #ff6b00; font-weight: 700; }
+[data-jsl-gpt] button.jsl-gpt-primary:hover { background: #ff8124; }
+[data-jsl-gpt]:has(.jsl-gpt-choices > *) .jsl-gpt-actions button.jsl-gpt-primary { background: transparent; color: inherit; border-color: #8886; font-weight: 500; }
+[data-jsl-gpt] button.jsl-gpt-quiet { border-color: transparent; padding: 5px 6px; font-size: 12px; opacity: .75; text-decoration: underline; text-underline-offset: 3px; }
+[data-jsl-gpt] button.jsl-gpt-quiet:hover { opacity: 1; }
+
+/* 연결된 지원서 — 제목이 길어도 한 줄을 유지한다. 전체 제목은 title 속성으로 본다. */
+[data-jsl-gpt] .jsl-gpt-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; border: 1px solid #8884; border-radius: 999px; padding: 4px 10px; font-size: 12px; opacity: .9; }
+[data-jsl-gpt] .jsl-gpt-chip b { font-weight: 600; min-width: 0; max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-jsl-gpt] .jsl-gpt-chip.jsl-gpt-off { opacity: .6; }
+[data-jsl-gpt] .jsl-gpt-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: #ff6b00; }
+[data-jsl-gpt] .jsl-gpt-dot[hidden] { display: none; }
+
+/* 상태 — 진행 중·완료·주의를 문장이 아니라 상자 모양으로 구분한다. 색은 주황 하나만 쓴다. */
+[data-jsl-gpt] .jsl-gpt-status { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; padding: 9px 11px; border: 1px solid #8883; border-radius: 8px; background: #8881; }
+[data-jsl-gpt] .jsl-gpt-status[hidden] { display: none; }
+[data-jsl-gpt] .jsl-gpt-status[data-tone="attn"] { border-color: #ff6b0070; background: #ff6b0012; }
+[data-jsl-gpt] .jsl-gpt-glyph { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 1px; border: 1px solid #8886; border-radius: 50%; font-size: 11px; line-height: 16px; text-align: center; opacity: .8; }
+[data-jsl-gpt] .jsl-gpt-status[data-tone="attn"] .jsl-gpt-glyph { border-color: #ff6b0070; color: #b34300; opacity: 1; }
+[data-jsl-gpt] .jsl-gpt-status[data-tone="busy"] .jsl-gpt-glyph { border-width: 2px; border-top-color: #ff6b00; animation: jsl-gpt-spin .9s linear infinite; }
+@keyframes jsl-gpt-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { [data-jsl-gpt] .jsl-gpt-status[data-tone="busy"] .jsl-gpt-glyph { animation: none; } }
+[data-jsl-gpt] .jsl-gpt-body { min-width: 0; }
+[data-jsl-gpt] .jsl-gpt-line { overflow-wrap: anywhere; }
+[data-jsl-gpt] .jsl-gpt-sub { margin-top: 2px; font-size: 12px; opacity: .7; overflow-wrap: anywhere; }
+[data-jsl-gpt] .jsl-gpt-sub[hidden] { display: none; }
+[data-jsl-gpt] .jsl-gpt-body > button { margin-top: 8px; }
+
+/* 선택 목록 */
+[data-jsl-gpt] .jsl-gpt-choices { display: grid; gap: 8px; margin-top: 10px; }
+[data-jsl-gpt] .jsl-gpt-choices:empty { display: none; margin-top: 0; }
 [data-jsl-gpt] .jsl-gpt-choices > button { text-align: left; overflow-wrap: anywhere; }
 [data-jsl-gpt] .jsl-gpt-candidate { display: grid; gap: 6px; padding: 10px; border: 1px solid #8885; border-radius: 8px; min-width: 0; }
-[data-jsl-gpt] .jsl-gpt-candidate pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font: inherit; padding: 8px; background: #8881; }
+[data-jsl-gpt] .jsl-gpt-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+[data-jsl-gpt] .jsl-gpt-badge { border: 1px solid #ff6b0070; border-radius: 5px; padding: 1px 7px; font-size: 11px; color: #b34300; }
+[data-jsl-gpt] .jsl-gpt-count { font-size: 11px; opacity: .6; }
+[data-jsl-gpt] .jsl-gpt-reason { font-size: 12px; color: #b34300; }
+[data-jsl-gpt] .jsl-gpt-preview { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: 0; padding: 8px; border-radius: 6px; background: #8881; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; opacity: .82; }
+[data-jsl-gpt] .jsl-gpt-preview.jsl-gpt-open { display: block; max-height: 240px; overflow: auto; opacity: 1; }
+[data-jsl-gpt] button.jsl-gpt-more { justify-self: start; border-color: transparent; padding: 2px 4px; font-size: 12px; opacity: .7; text-decoration: underline; text-underline-offset: 3px; }
+[data-jsl-gpt] .jsl-gpt-label { display: grid; gap: 4px; min-width: 0; }
+[data-jsl-gpt] .jsl-gpt-label > span { font-size: 11px; opacity: .65; }
 [data-jsl-gpt] select { width: 100%; min-width: 0; background-color: Canvas; color: CanvasText; }
-html.dark [data-jsl-gpt] button.jsl-gpt-primary { color: #ffb580; }
 
-[data-jsl-gpt] .jsl-gpt-result { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-[data-jsl-gpt] .jsl-gpt-result > button { margin-top: 9px; flex-shrink: 0; }
+html.dark [data-jsl-gpt] .jsl-gpt-status[data-tone="attn"] .jsl-gpt-glyph,
+html.dark [data-jsl-gpt] .jsl-gpt-badge,
+html.dark [data-jsl-gpt] .jsl-gpt-reason { color: #ffb580; }
