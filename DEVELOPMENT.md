@@ -44,6 +44,7 @@ ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하는 기능도
 | GPT 추출·문항 대응 | `src/core/gpt-protocol.js`, `src/features/gpt-response.js` |
 | GPT 연결·라우팅 | `src/core/gpt-background.js`, `src/features/gpt-connect.js` |
 | 외부 복사 패널 / 호출 버튼 | `src/features/relay-panel.js`, `relay-source.js`, `src/options/options.html`, `src/core/gpt-background.js`의 `relay:` 경로 |
+| 내 이력 직접 입력 / 저장 / 편집 | `src/core/relay-profile.js`, `src/options/profile.js`, `profile.css`. 사용자 정보는 로컬 storage에만 보관 |
 | GPT UI 스타일 | `src/features/gpt-response.css` |
 
 `src/features/qna-nav.js`는 남아 있는 미사용 파일이며 manifest에 등록되지 않는다.
@@ -109,6 +110,8 @@ git diff --check
 
 - 첫 명령은 Node 내장 테스트 러너를 사용한다. GPT 브라우저 테스트에는 `playwright`와 해당 Chromium이 필요하다.
   공용 설치를 사용할 때는 그 환경의 `NODE_PATH`를 설정한다. 개발자 개인 PC 경로를 소스에 고정하지 않는다.
+node --test tests/relay/profile.test.cjs
+node tests/relay/browser.cjs
 - GPT 브라우저 테스트는 임시 프로필에 실제 확장을 로드하고 두 사이트 HTTPS 요청을 로컬 가상 데이터로 대체한다.
 - 채팅 fixture 서버는 출력된 localhost 주소의 `/`가 React, `/angular`가 Angular 재현 화면이다. 고정 포트를 가정하지 않는다.
 - 테스트 종료 후 자신이 띄운 서버만 종료한다. 사용자의 기존 Chrome 프로필·탭이나 다른 개발 서버를 정리하지 않는다.

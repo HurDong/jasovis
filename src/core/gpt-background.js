@@ -149,6 +149,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
 // 끄기: 등록을 풀고 jslRelayOn을 비운다. 떠 있는 막대는 storage 변화를 보고 스스로 사라진다
 //       (탭마다 제거 스크립트를 쏘지 않아도 되고, 권한이 이미 걷힌 뒤에도 안전하다).
 const RELAY_ID = 'jsl-relay';
+const RELAY_FILES = ['src/core/relay-profile.js', 'src/features/relay-panel.js'];
 const RELAY_ORIGINS = { origins: ['*://*/*'] };
 const relayInjectable = url => /^https?:\/\//.test(url || '');
 
@@ -163,7 +164,7 @@ async function relayEnable(resumeId) {
   await chrome.storage.local.set({ jslRelayOn: String(resumeId) });
   const script = {
     id: RELAY_ID,
-    js: ['src/features/relay-panel.js'],
+    js: RELAY_FILES,
     matches: ['*://*/*'],
     runAt: 'document_idle',
     allFrames: false,
@@ -176,7 +177,7 @@ async function relayEnable(resumeId) {
   // 이미 열려 있는 탭은 등록만으로는 안 뜬다 — 새로고침을 기다리지 않게 한 번씩 넣는다.
   const tabs = (await chrome.tabs.query({})).filter(t => relayInjectable(t.url));
   await Promise.all(tabs.map(t =>
-    chrome.scripting.executeScript({ target: { tabId: t.id }, files: ['src/features/relay-panel.js'] })
+    chrome.scripting.executeScript({ target: { tabId: t.id }, files: RELAY_FILES })
       .catch(() => { /* 넣을 수 없는 탭은 건너뛴다 */ })));
   return { on: true, tabs: tabs.length };
 }
@@ -208,3 +209,9 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
 chrome.permissions.onRemoved.addListener(async () => {
   if (!(await chrome.permissions.contains(RELAY_ORIGINS))) await relayDisable();
 });
+
+// 이전 버전이 등록해 둔 스크립트에도 공통 프로필 모듈을 앞에 추가한다.
+// 권한을 요청하거나 꺼진 호출을 켜지 않는다. 이미 열린 문서는 사용자가 새로고침한다.
+relayRegistered().then(async registered => {
+  if (registered) await chrome.scripting.updateContentScripts([{ id: RELAY_ID, js: RELAY_FILES }]);
+}).catch(() => { /* 권한 회수/확장 종료와 겹친 경우 다음 호출 때 다시 등록 */ });

@@ -28,6 +28,7 @@
   button.ghost:hover { background: #fafafa; color: #333; }
   .note { margin-top: 18px; font-size: 12.5px; color: #999; line-height: 1.8; }
 </style>
+<link rel="stylesheet" href="profile.css">
 </head>
 <body>
 <div class="wrap">
@@ -51,7 +52,33 @@
     <p class="note">허용한 뒤 자소서 작성 페이지로 돌아가 대시보드의
       <b>‘자비스 호출’</b> 버튼을 누르면 켜집니다. <b>‘자비스 닫기’</b> 또는 막대의 <b>✕</b>를 누르면 모든 탭에서 닫힙니다.</p>
   </div>
+  <section class="card profile" aria-labelledby="profile-heading">
+    <h2 id="profile-heading">내 이력 관리</h2>
+    <p>어학·자격증·수상·교육을 한 번 등록해 자비스에서 꺼내 쓰세요. 이 브라우저에만 보관되며 배포 파일에는 포함되지 않습니다.</p>
+    <p class="profile-help">분류를 선택하고 항목을 추가해 직접 입력하세요. 한 번 저장하면 다른 지원서에서도 그대로 꺼내 쓸 수 있습니다.</p>
+    <div id="profile-tabs" class="profile-tabs" aria-label="이력 분류"></div>
+    <div id="profile-records"></div>
+    <div class="profile-add">
+      <button id="profile-add" type="button" class="ghost" disabled>항목 추가</button>
+      <button id="profile-language" type="button" class="ghost" hidden disabled>외국어 활용능력 추가</button>
+    </div>
+    <details class="profile-import">
+      <summary>JSON 붙여넣기로 한꺼번에 추가</summary>
+      <p class="profile-help">저장 형식(<code>version: 1</code>)의 JSON을 붙여넣으면 편집 화면 뒤에 추가합니다.
+        각 항목의 첫 필드가 이름이 되며, 이미 있는 같은 항목과 이름만 같은 항목은 추가하지 않습니다.
+        값은 그대로 두고, 확인한 뒤 <b>내 이력 저장</b>을 눌러야 저장됩니다.</p>
+      <textarea id="profile-import-text" rows="6" spellcheck="false" aria-label="붙여넣을 이력 JSON" disabled></textarea>
+      <div class="profile-add"><button id="profile-import" type="button" class="ghost" disabled>편집 화면에 추가</button></div>
+    </details>
+    <div class="row profile-bottom">
+      <span id="profile-status" role="status" aria-live="polite">내 이력을 불러오는 중…</span>
+      <button id="profile-reload" type="button" class="ghost">저장본 다시 읽기</button>
+      <button id="profile-save" type="button" disabled>내 이력 저장</button>
+    </div>
+  </section>
 </div>
 <script src="options.js"></script>
+<script src="../core/relay-profile.js"></script>
+<script src="profile.js"></script>
 </body>
 </html>
