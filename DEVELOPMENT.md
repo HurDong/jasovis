@@ -110,6 +110,8 @@ Chrome `chrome://extensions`에서 개발자 모드를 켜고 저장소 루트�
 node --test tests/gpt/protocol.test.cjs tests/gpt/background.test.cjs tests/chat-tools/main.test.cjs
 node --test tests/gpt/matching.test.cjs
 node --test tests/relay/source.test.cjs tests/list-cards/menu.test.cjs
+node --test tests/relay/profile.test.cjs
+node tests/relay/browser.cjs
 node tests/gpt/browser.cjs
 node tests/gpt/matching.browser.cjs
 node tests/chat-tools/serve.cjs
@@ -118,8 +120,6 @@ git diff --check
 
 - 첫 명령은 Node 내장 테스트 러너를 사용한다. GPT 브라우저 테스트에는 `playwright`와 해당 Chromium이 필요하다.
   공용 설치를 사용할 때는 그 환경의 `NODE_PATH`를 설정한다. 개발자 개인 PC 경로를 소스에 고정하지 않는다.
-node --test tests/relay/profile.test.cjs
-node tests/relay/browser.cjs
 - GPT 브라우저 테스트는 임시 프로필에 실제 확장을 로드하고 두 사이트 HTTPS 요청을 로컬 가상 데이터로 대체한다.
 - 채팅 fixture 서버는 출력된 localhost 주소의 `/`가 React, `/angular`가 Angular 재현 화면이다. 고정 포트를 가정하지 않는다.
 - 테스트 종료 후 자신이 띄운 서버만 종료한다. 사용자의 기존 Chrome 프로필·탭이나 다른 개발 서버를 정리하지 않는다.
