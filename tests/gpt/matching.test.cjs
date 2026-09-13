@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const P = require('../../src/core/gpt-protocol');
 const { compoundPairs: pairs, compoundQnas } = require('./fixtures.cjs');
+const { wrappedPairs, wrappedQnas } = require('./fixtures.cjs');
 const state = { resume: { id: 77 }, qnas: compoundQnas };
 const parse = (label, question, text = '가상 답변') => P.parse([
   { type: 'heading', level: 3, text: '문항 ' + label },
@@ -89,4 +90,26 @@ test('복합 문항도 준비 뒤 질문 변경을 유사도로 우회하지 않
   changed.qnas[0].question += ' *수정된 안내입니다.';
   assert.equal(P.sameQuestions(P.metadata(state), changed), false);
   assert.throws(() => P.validate(packet, changed), /변경/);
+});
+test('괄호로 감싼 ※ 안내의 생략과 NBSP·중첩 괄호·분량 표기를 처리', () => {
+  const source = { resume: { id: 77 }, qnas: wrappedQnas };
+  const candidates = wrappedPairs.flatMap((p, i) => parse(String(i + 1), p.response, p.answer)).map((c, i) => ({ ...c, key: String(i) }));
+  const packet = P.map(candidates, source).packet;
+  assert.ok(packet);
+  assert.deepEqual(packet.answers.map(a => a.number), [1, 2, 3, 4]);
+  assert.deepEqual(packet.answers.map(a => a.question), wrappedPairs.map(p => p.source));
+  assert.deepEqual(packet.answers.map(a => a.text), wrappedPairs.map(p => p.answer));
+});
+test('명시적 안내 표식 없는 괄호·깨진 괄호·괄호 뒤 추가 요구는 보존', () => {
+  const main = wrappedPairs[0].response;
+  for (const suffix of [' (금융 분야 경험)', ' (※ 결과를 기술해주세요.', ' (※ 안내) 추가 요구를 작성하시오.', ' (※ 안내）']) {
+    const source = { resume: { id: 77 }, qnas: [{ id: 301, number: 1, question: main + suffix, answer: '' }] };
+    assert.equal(P.map(parse('1', main), source).packet, null, suffix);
+  }
+});
+test('전각 안내 괄호도 처리하되 양쪽에 있는 안내의 충돌은 보류', () => {
+  const main = wrappedPairs[0].response;
+  const source = { resume: { id: 77 }, qnas: [{ id: 301, number: 1, question: main + ' （ ※ 결과를 포함해주세요. ）', answer: '' }] };
+  assert.equal(P.map(parse('1', main), source).packet.answers[0].id, '301');
+  assert.equal(P.map(parse('1', main + ' ( ※ 결과를 제외해주세요. )'), source).packet, null);
 });

@@ -146,6 +146,8 @@ JSL.register('hotkeys', function () {
   // capture 단계 리스너 — textarea 포커스 중에도 동작
   document.addEventListener('keydown', function (e) {
     try {
+      // 질문창은 Shadow DOM 안의 별도 초안이다. capture 단계에서 원본 저장/문항 전환을 막는다.
+      if (e.composedPath().some(el => el.id === 'jsl-gpt-feedback')) return;
       if (e.isComposing) return; // 한글 조합 중이면 무시
       if (handleKey(e)) {
         // 처리한 키만 기본 동작/전파 차단. 처리 안 한 키는 건드리지 않는다.

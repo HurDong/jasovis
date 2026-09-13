@@ -11,7 +11,8 @@
     "scripting"
   ],
   "host_permissions": [
-    "https://jasoseol.com/*"
+    "https://jasoseol.com/*",
+    "https://chatgpt.com/*"
   ],
   "background": {
     "service_worker": "src/core/gpt-background.js"
@@ -40,7 +41,8 @@
       ],
       "js": [
         "src/core/gpt-protocol.js",
-        "src/features/gpt-response.js"
+        "src/features/gpt-response.js",
+        "src/features/gpt-feedback-client.js"
       ],
       "run_at": "document_idle"
     },
@@ -96,8 +98,10 @@
       "js": [
         "src/core/bridge.js",
         "src/core/gpt-protocol.js",
+        "src/core/gpt-feedback.js",
         "src/features/gpt-connect.js",
         "src/features/dashboard.js",
+        "src/features/gpt-feedback.js",
         "src/features/jd-panel.js",
         "src/features/chat-jd.js",
         "src/features/chat-reply.js",

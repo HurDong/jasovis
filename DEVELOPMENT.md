@@ -1,14 +1,15 @@
 # 자비스 개발 재개 안내
 
-최종 정리: 2026-09-11. 이 문서는 현재 구현으로 들어가는 안내이며, 작업 상태는 매번 Git과 코드로 확인한다.
+최종 정리: 2026-09-14. 이 문서는 현재 구현으로 들어가는 안내이며, 작업 상태는 매번 Git과 코드로 확인한다.
 확정된 다음 개발 과제는 없다. 아래 제약을 새 작업에 대한 자동 승인으로 해석하지 않는다.
 
 ## 서비스와 실행 환경
 
 자비스는 자소설닷컴의 자소서 편집·전형 목록·채팅을 보조하는 비공식 Chrome MV3 확장이다.
-ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하는 기능도 제공한다.
+ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하고, 현재 답변의 선택 인용에 관한 질문을 연결된 GPT 대화에 전송한다.
 별도 백엔드·OpenAI API·빌드 과정은 없다. 소스와 `manifest.json`이 있는 저장소 루트를 Chrome에 로드한다.
-확장 자체 보관 데이터는 `chrome.storage.local`을 사용한다. 사이트 기능은 기존 로그인 상태로 사이트와 통신할 수 있다.
+영구 보관은 `chrome.storage.local`, GPT 질문 초안·전송 중복 방지는 `chrome.storage.session`을 사용한다.
+사이트 기능은 기존 로그인 상태로 사이트와 통신할 수 있다.
 
 | 실행 위치 | 역할 / 진입점 |
 |---|---|
@@ -43,6 +44,8 @@ ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하는 기능도
 | 채팅 색·레이아웃 | `src/features/chat-design.css` |
 | GPT 추출·문항 대응 | `src/core/gpt-protocol.js`, `src/features/gpt-response.js` |
 | GPT 연결·라우팅 | `src/core/gpt-background.js`, `src/features/gpt-connect.js` |
+| 현재 문항 인용·질문 UI | `src/core/gpt-feedback.js`(순수 계약·프롬프트), `src/features/gpt-feedback.js`(Shadow DOM) |
+| 자소설 → GPT 전송 | `src/core/gpt-feedback-background.js`(세션·검증·라우팅), `src/features/gpt-feedback-client.js`(웹 입력·전송 확인) |
 | 외부 복사 패널 / 호출 버튼 | `src/features/relay-panel.js`, `relay-source.js`, `src/options/options.html`, `src/core/gpt-background.js`의 `relay:` 경로 |
 | 내 이력 직접 입력 / 저장 / 편집 | `src/core/relay-profile.js`(검증·병합·틀), `src/features/relay-panel.js`(패널 안 ✎ 수정·추가·삭제·JSON). 옵션 화면에는 편집 UI 없음. 사용자 정보는 로컬 storage에만 보관 |
 | GPT UI 스타일 | `src/features/gpt-response.css` |
@@ -87,6 +90,18 @@ ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하는 기능도
 연결은 다음 적용에서 대상 선택을 줄이는 편의 기능이며 자동 동기화가 아니다.
 저장 버튼은 호출하지 않는다. 모델 입력 확인은 사이트 서버 저장 확인과 다르며, 사이트 입력 훅의 자동 저장 여부는 별도다.
 
+## 현재 문항 GPT 질문
+
+- 선택 범위는 `textarea.answer`의 UTF-16 시작/끝 위치와 선택 당시 원문에 고정한다. 다른 문항의 인용을 한 요청에 모으지 않는다.
+- `feedback:` 메시지는 기존 `gpt:` 답변 적용과 분리한다. `gpt:state`로 현재 문항·문서와 원문을 재확인한다.
+- 기존 `gpt-conversation:*` 연결을 역으로 찾는다. 미연결 대화를 사용자가 선택하면 같은 연결 계약을 만든다.
+  자동으로 회사 이름을 추측하거나 새로운 GPT 대화/프로젝트를 만들지 않는다.
+- `feedback:authorize`는 실제 전송 클릭 직전에 출처·연결 revision·현재 원문을 재검증한다.
+  세션에 클릭 가능 상태를 기록한 뒤 승인하며, 워커가 재시작돼도 같은 요청을 다시 클릭하지 않는다.
+- 기존 GPT 입력·생성 상태를 보존한다. 사용자 메시지 ID와 본문을 확인한 경우만 성공이다.
+  확인 불가 요청은 자동 재시도하지 않으며, 실제 사이트 전송 시험은 별도 구체적인 허용 범위를 확인한다.
+- 원문/질문이 들어 있는 초안은 같은 탭·지원서·문항의 세션 안에서만 복원한다. 개인정보 처리 범위는 PRIVACY도 함께 수정한다.
+
 ## 디자인·행동 결정
 
 - 목록에서 작성 중을 우선한다. 제출 완료는 내용에 맞춰 높이를 쓰고 상한을 두어 작성 중 공간을 확보한다.
@@ -109,11 +124,13 @@ Chrome `chrome://extensions`에서 개발자 모드를 켜고 저장소 루트�
 ```sh
 node --test tests/gpt/protocol.test.cjs tests/gpt/background.test.cjs tests/chat-tools/main.test.cjs
 node --test tests/gpt/matching.test.cjs
+node --test tests/gpt/feedback.test.cjs tests/gpt/feedback-background.test.cjs
 node --test tests/relay/source.test.cjs tests/list-cards/menu.test.cjs
 node --test tests/relay/profile.test.cjs
 node tests/relay/browser.cjs
 node tests/gpt/browser.cjs
 node tests/gpt/matching.browser.cjs
+node tests/gpt/feedback.browser.cjs
 node tests/chat-tools/serve.cjs
 git diff --check
 ```

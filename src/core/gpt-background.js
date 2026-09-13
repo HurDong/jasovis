@@ -143,6 +143,8 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   return true;
 });
 
+importScripts('gpt-feedback.js', 'gpt-feedback-background.js');
+
 // ── 모든 탭에 뜨는 세로 복사 바 (relay) ──────────────────────────────
 // 켜기: 동적 콘텐츠 스크립트를 등록해 두면 그 뒤 여는 모든 탭에 자동 주입된다.
 //       이미 열려 있는 탭에는 한 번씩 직접 넣는다.

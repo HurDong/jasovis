@@ -48,7 +48,19 @@
   }
   function questionParts(text, number) {
     // 문장 뒤에 명시적으로 표시된 안내만 분리한다. 임의의 두 번째 문장은 보존한다.
-    const marked = /([.!?。]\s*)(?:\*{1,2}|※|•)\s*/.exec(text);
+    let marked = /([.!?。]\s*)([（(]\s*)?(?:\*{1,2}|※|•)\s*/.exec(text);
+    if (marked?.[2]) {
+      // '(※ 안내)'는 끝까지 하나의 균형 잡힌 괄호여야 한다. 뒤의 별도 요구를 버리지 않는다.
+      const tail = text.slice(marked.index + marked[1].length).trimEnd(), stack = [];
+      for (let i = 0; i < tail.length; i++) {
+        const char = tail[i];
+        if (char === '(' || char === '（') stack.push(char);
+        if (char === ')' || char === '）') {
+          if (stack.pop() !== (char === ')' ? '(' : '（') || (!stack.length && i < tail.length - 1)) { marked = null; break; }
+        }
+      }
+      if (stack.length) marked = null;
+    }
     const main = marked ? text.slice(0, marked.index + marked[1].length) : text;
     const canonical = value => questionKey(value, number).replace(/(서술|기술|작성|설명)(?:하시오|하십시오|해\s*주세요)/g, '$1');
     return { main: canonical(main), detail: marked ? questionKey(text.slice(marked.index + marked[0].length)) : '' };

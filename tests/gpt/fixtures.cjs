@@ -39,4 +39,12 @@ const compoundPairs = [
 ].map(([label, main, guide], i) => ({ label, main, source: '[문항' + label + '] ' + main + (guide ? ' *' + guide : ''),
   response: main + ([0, 5].includes(i) ? ' ' + guide : ''), answer: '[가상 답변 ' + label + ']\n\n  공백과 줄바꿈을 보존합니다.\t끝\n' }));
 const compoundQnas = compoundPairs.map((p, i) => ({ id: 201 + i, number: i + 1, question: p.source, answer: '기존 ' + (i + 1) }));
-module.exports = { questions, answers, block, full, turn, chat, resume, detailedPairs, compoundPairs, compoundQnas };
+const wrappedPairs = [
+  ['학습이나 업무 과정에서 어려움을 해결한 경험과 배운 점을 기술해주세요.', '\r\n\u00a0\u00a0( ※ 수행한 활동 / 본인 역할 / 결과와 교훈을 구체적으로 설명해주세요. )'],
+  ['지원 직무를 이해한 내용과 본인이 적합한 이유를 역량과 연결하여 기술해 주세요.', '     ( ※ 관련 지식(개발언어, 자격 등), 경험과 경쟁력을 기술해 주세요)'],
+  ['예시기업의 가치 중 하나를 선택하고 본인의 강점과 연결하여 기술해 주세요.', ' ( ※ 회사 채용 홈페이지 참조 : 기업문화 >> 가치 )'],
+  ['지원 동기와 앞으로 이루고 싶은 목표 및 준비 계획을 기술해 주세요.', '']
+].map(([main, guide], i) => ({ source: main + guide + ' (최소 500자, 최대 700자 입력가능)',
+  response: main.replace('기술해주세요', '기술해 주세요'), answer: '괄호 안내 가상 답변 ' + (i + 1) + '\n' }));
+const wrappedQnas = wrappedPairs.map((p, i) => ({ id: 301 + i, number: i + 1, question: p.source, answer: '기존 ' + (i + 1) }));
+module.exports = { questions, answers, block, full, turn, chat, resume, detailedPairs, compoundPairs, compoundQnas, wrappedPairs, wrappedQnas };
