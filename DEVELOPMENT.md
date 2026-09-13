@@ -44,7 +44,7 @@ ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하는 기능도
 | GPT 추출·문항 대응 | `src/core/gpt-protocol.js`, `src/features/gpt-response.js` |
 | GPT 연결·라우팅 | `src/core/gpt-background.js`, `src/features/gpt-connect.js` |
 | 외부 복사 패널 / 호출 버튼 | `src/features/relay-panel.js`, `relay-source.js`, `src/options/options.html`, `src/core/gpt-background.js`의 `relay:` 경로 |
-| 내 이력 직접 입력 / 저장 / 편집 | `src/core/relay-profile.js`, `src/options/profile.js`, `profile.css`. 사용자 정보는 로컬 storage에만 보관 |
+| 내 이력 직접 입력 / 저장 / 편집 | `src/core/relay-profile.js`(검증·병합·틀), `src/features/relay-panel.js`(패널 안 ✎ 수정·추가·삭제·JSON). 옵션 화면에는 편집 UI 없음. 사용자 정보는 로컬 storage에만 보관 |
 | GPT UI 스타일 | `src/features/gpt-response.css` |
 
 `src/features/qna-nav.js`는 남아 있는 미사용 파일이며 manifest에 등록되지 않는다.

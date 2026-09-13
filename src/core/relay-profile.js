@@ -10,6 +10,8 @@
     '수상': ['상훈명', '수여기관', '수상일자', '수상내역'],
     '교육': ['과정명', '교육기관', '시작일', '종료일', '교육시간', '주요내용']
   };
+  // 같은 분류 안의 다른 입력 틀. 어학의 외국어 활용능력은 시험 정보 대신 수준을 적는다.
+  var alternates = { '어학': { '외국어 활용능력': ['외국어', '회화수준', '작문수준', '독해수준'] } };
   function empty() {
     return { version: 1, categories: { '어학': [], '자격증': [], '수상': [], '교육': [] } };
   }
@@ -73,7 +75,7 @@
     });
     return { value: result, added: added, duplicates: duplicates, conflicts: conflicts };
   }
-  var api = { key: KEY, limit: LIMIT, categories: categories, templates: templates, empty: empty, validate: validate, merge: merge };
+  var api = { key: KEY, limit: LIMIT, categories: categories, templates: templates, alternates: alternates, empty: empty, validate: validate, merge: merge };
   scope.JSLRelayProfile = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(globalThis);

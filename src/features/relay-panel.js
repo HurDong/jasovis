@@ -20,6 +20,9 @@
   var profile = null, profileError = '', activeCategory = null;
   // 분류별로 고른 항목과 항목별 복사 진행. 이 탭에서만 기억하고 항목 내용이 바뀌면 새로 시작한다.
   var selectedRecord = {}, progress = {};
+  // 패널 안 편집 상태. 입력 중인 값은 여기에 두어 storage 변경으로 다시 그려도 잃지 않는다.
+  // field: 칸 하나 수정, new: 새 항목, delete: 삭제 확인, json: JSON 붙여넣기
+  var edit = null, saving = false, notice = null;
 
   // 등록된 콘텐츠 스크립트라 페이지마다 한 번씩 돈다. 이미 붙어 있으면 그대로 둔다
   // (중복 주입 시 지워버리면 새로고침마다 깜빡인다).
@@ -131,10 +134,60 @@
     '.next:focus-visible{outline:2px solid #f3f3f3;outline-offset:2px}',
     '@media (prefers-reduced-motion: reduce){.dock-value.enter{animation:none}.next{transition:none}}',
     '.profile-footer{padding:10px 12px;display:flex;gap:6px;align-items:center;font-size:11px;color:#aaa}',
-    '.profile-status{flex:1;overflow-wrap:anywhere}.profile-empty{padding:16px;font-size:12px;line-height:1.6;color:#ccc}',
+    '.profile-status{flex:1;overflow-wrap:anywhere}.profile-status.error{color:#ff9a5c}',
+    '.profile-empty{padding:16px;font-size:12px;line-height:1.6;color:#ccc;word-break:keep-all}',
+    // 패널 안 편집: 입력칸은 어두운 면, 저장·추가만 주황 단색으로 둔다.
+    '.profile-head .pick.add{border-style:dashed;color:#aaa}',
+    '.profile-head .pick.add[aria-pressed=true]{border-style:solid}',
+    '.record-row{display:flex;align-items:baseline;gap:8px}.record-row strong{flex:1;min-width:0}',
+    '.title-action{flex:0 0 auto;padding:2px 0;border:0;background:transparent;color:#8a8a8a;font-size:11px;cursor:pointer}',
+    '.title-action:hover{color:#fff}',
+    '.delete-ask{display:flex;align-items:center;gap:6px;margin-top:6px;padding:6px 6px 6px 10px;border-radius:8px;background:#333;font-size:11.5px;color:#ddd}',
+    '.delete-ask span{flex:1}',
+    '.mini{height:26px;padding:0 10px;border:1px solid #4a4a4a;border-radius:6px;background:transparent;color:#ddd;font-size:11px;cursor:pointer}',
+    '.mini.primary{border-color:#ff6813;background:#ff6813;color:#fff}',
+    '.step .field{padding-right:32px}',
+    '.pen{position:absolute;right:2px;top:4px;height:22px;min-width:26px;padding:0 6px;border:0;border-radius:6px;',
+    'background:#444;color:#f3f3f3;font-size:12px;cursor:pointer;opacity:0}',
+    '.step:hover .pen,.pen:focus-visible{opacity:1}.pen:hover{background:#ff6813;color:#fff}',
+    '.field-edit{display:grid;grid-template-columns:52px minmax(0,1fr) 26px 26px;gap:6px;align-items:center;padding:4px 2px 2px 8px}',
+    '.field-edit:has(textarea){align-items:start}',
+    '.edit-input{width:100%;min-width:0;height:30px;padding:0 8px;border:1px solid #4a4a4a;border-radius:7px;background:#1f1f1f;',
+    'color:#f3f3f3;font-size:12.5px;line-height:1.5;font-family:inherit}',
+    'textarea.edit-input{height:auto;padding:6px 8px;resize:vertical}',
+    '.edit-input:focus{outline:none;border-color:#ff6813}',
+    '.edit-ok,.edit-cancel{height:26px;border:0;border-radius:6px;font-size:12px;cursor:pointer}',
+    '.edit-ok{background:#ff6813;color:#fff}.edit-cancel{background:#3d3d3d;color:#ddd}',
+    '.edit-hint{padding:2px 8px 6px 66px;font-size:10.5px;color:#888}',
+    '.edit-variants{display:flex;gap:4px;padding:8px 16px 0}',
+    '.variant{height:26px;padding:0 10px;border:1px solid #4a4a4a;border-radius:999px;background:transparent;color:#bbb;font-size:11px;cursor:pointer}',
+    '.variant[aria-pressed=true]{background:#f3f3f3;border-color:#f3f3f3;color:#1e1e1e}',
+    '.edit-form{display:flex;flex-direction:column;gap:8px;padding:10px 14px 12px}',
+    '.edit-row{display:grid;grid-template-columns:56px minmax(0,1fr);gap:8px;align-items:center}.edit-row:has(textarea){align-items:start}',
+    '.edit-label{font-size:11px;color:#9a9a9a;overflow-wrap:anywhere}',
+    '.btns{display:flex;gap:8px}',
+    '.solid{flex:1;width:100%;height:42px;border:0;border-radius:9px;background:#ff6813;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer}',
+    '.solid:hover{background:#f05f0c}',
+    '.ghost{flex:0 0 auto;height:42px;padding:0 16px;border:1px solid #4a4a4a;border-radius:9px;background:transparent;color:#ddd;font-size:13px;cursor:pointer}',
+    '.ghost:hover{background:#333}',
+    '.solid:disabled,.ghost:disabled,.mini:disabled,.edit-ok:disabled{opacity:.5;cursor:default}',
+    '.json{padding:10px 14px 12px}',
+    '.json-help{font-size:11px;line-height:1.55;color:#9a9a9a;word-break:keep-all}',
+    '.json-sample{margin:6px 0 8px;padding:0;border:0;background:transparent;color:#ccc;font-size:11px;text-decoration:underline;cursor:pointer}',
+    '.json-area{min-height:150px;font:11px/1.5 Consolas,"SFMono-Regular",monospace}',
+    '.json-error{margin-top:8px;padding:8px 10px;border-radius:8px;background:#3a2a22;color:#ffb38a;font-size:11.5px;line-height:1.5;overflow-wrap:anywhere}',
+    '.json-preview{margin-top:8px;padding:9px 10px;border-radius:8px;background:#333;font-size:11.5px;line-height:1.55;overflow-wrap:anywhere}',
+    '.json-preview strong{display:block;margin-bottom:2px;font-size:12.5px}',
+    '.json-line b{margin-right:6px;color:#fff}.json-line span{color:#bbb}.json-note{color:#9a9a9a}',
     '</style>',
     '<div class="wrap"><div class="bar"></div><section class="profile-panel" aria-label="내 이력" hidden></section><div class="tip"></div></div>'
   ].join('');
+
+  // 패널 입력칸의 키 입력이 사이트 단축키로 올라가지 않게 shadow root에서 멈춘다.
+  // (캡처 단계로 먼저 듣는 사이트 스크립트까지 막을 수는 없다.)
+  ['keydown', 'keyup', 'keypress', 'beforeinput', 'input', 'paste', 'cut', 'copy'].forEach(function (type) {
+    root.addEventListener(type, function (e) { if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) e.stopPropagation(); });
+  });
 
   var bar = root.querySelector('.bar');
   var tip = root.querySelector('.tip');
@@ -185,8 +238,10 @@
     return -1;
   }
 
+  function progressKey(category, index, record) { return category + '\n' + index + '\n' + JSON.stringify(record); }
+
   function progressOf(index, record) {
-    var key = activeCategory + '\n' + index + '\n' + JSON.stringify(record);
+    var key = progressKey(activeCategory, index, record);
     return progress[key] || (progress[key] = { done: {}, next: nextField(record, -1) });
   }
 
@@ -201,61 +256,333 @@
       .map(function (pair) { return pair[1]; }).join(' – ');
   }
 
+  // 저장 결과 안내는 저장 직후 storage 변경으로 다시 그려져도 잠시 유지한다.
+  function note(text, error) { notice = { text: text, error: !!error, until: Date.now() + (error ? 8000 : 4000) }; }
+  function say(text, error) {
+    note(text, error);
+    var status = panel.querySelector('.profile-status');
+    if (status) { status.textContent = text; status.classList.toggle('error', !!error); }
+  }
+
+  function focusOn(key) {
+    var el = panel.querySelector('[data-focus="' + key + '"]');
+    if (el) { el.focus({ preventScroll: true }); if (el.setSelectionRange) el.setSelectionRange(el.value.length, el.value.length); }
+  }
+
+  function cancelEdit() { edit = null; renderProfile(); }
+
+  function textInput(label, value, multiline, focusKey, onInput) {
+    var input = element(multiline ? 'textarea' : 'input', 'edit-input');
+    if (multiline) input.rows = 4; else input.type = 'text';
+    input.value = value; input.maxLength = 10000; input.spellcheck = false;
+    input.setAttribute('aria-label', label); input.dataset.focus = focusKey;
+    input.addEventListener('input', function () { onInput(input.value); });
+    return input;
+  }
+
+  // 항상 최신 저장본을 읽어 고친 뒤 검증·저장하고 다시 읽어 확인한다. 다른 탭의 변경을 덮어쓰지 않는다.
+  function saveProfile(mutate) {
+    return chrome.storage.local.get(PROFILE_KEY).then(function (items) {
+      var current = items[PROFILE_KEY] == null ? P.empty() : P.validate(items[PROFILE_KEY]);
+      var value = P.validate(mutate(JSON.parse(JSON.stringify(current))));
+      var change = {}; change[PROFILE_KEY] = value;
+      return chrome.storage.local.set(change).then(function () { return chrome.storage.local.get(PROFILE_KEY); }).then(function (check) {
+        if (JSON.stringify(P.validate(check[PROFILE_KEY])) !== JSON.stringify(value)) throw new Error('저장한 내용을 다시 읽어 확인하지 못했습니다.');
+        return value;
+      });
+    });
+  }
+
+  function run(mutate, done) {
+    if (saving) return;
+    saving = true;
+    panel.querySelectorAll('.btns button, .edit-ok, .mini').forEach(function (b) { b.disabled = true; });
+    var pending;
+    try { pending = saveProfile(mutate); } catch (e) { pending = Promise.reject(e); }
+    pending.then(function (value) {
+      saving = false; profile = value; profileError = '';
+      done(value); renderProfile();
+    }, function (e) {
+      saving = false; renderProfile();
+      var message = e && e.message ? e.message : String(e);
+      if (/context invalidated/i.test(message) || !(globalThis.chrome && chrome.runtime && chrome.runtime.id)) message = '확장을 다시 로드한 뒤 페이지를 새로고침해 주세요.';
+      say('저장하지 못했습니다. ' + message, true);
+    });
+  }
+
   function renderProfile() {
+    var active = root.activeElement, focusKey = active && active.dataset ? active.dataset.focus : null;
+    var selStart = focusKey && typeof active.selectionStart === 'number' ? active.selectionStart : null, selEnd = selStart == null ? null : active.selectionEnd;
+    var keepScroll = edit ? panel.scrollTop : 0;
     panel.replaceChildren(); panel.hidden = !activeCategory;
     root.querySelectorAll('.category').forEach(function (b) { b.setAttribute('aria-expanded', String(b.textContent === activeCategory)); });
     if (!activeCategory) return;
     hideTip();
-    var list = profile ? profile.categories[activeCategory] : [];
-    var index = Math.max(0, Math.min(selectedRecord[activeCategory] || 0, list.length - 1));
-    selectedRecord[activeCategory] = index;
+    var category = activeCategory;
+    if (edit && edit.category !== category) edit = null;
+    var list = profile ? profile.categories[category] : [];
+    var index = Math.max(0, Math.min(selectedRecord[category] || 0, list.length - 1));
+    selectedRecord[category] = index;
     var heading = element('div', 'profile-head');
-    heading.appendChild(element('strong', '', activeCategory));
+    heading.appendChild(element('strong', '', category));
     var choices = element('div', 'profile-picks');
     list.forEach(function (record, i) {
       var b = element('button', 'pick', String(i + 1));
       b.title = record.title; b.setAttribute('aria-label', (i + 1) + '. ' + record.title);
-      b.setAttribute('aria-pressed', String(i === index));
+      b.setAttribute('aria-pressed', String(i === index && !(edit && edit.kind !== 'field' && edit.kind !== 'delete')));
       if (finished(record, progressOf(i, record))) b.classList.add('fin');
-      b.addEventListener('click', function () { selectedRecord[activeCategory] = i; renderProfile(); });
+      b.addEventListener('click', function () { edit = null; selectedRecord[category] = i; renderProfile(); });
       choices.appendChild(b);
     });
+    if (profile && !profileError && list.length < 50) {
+      var add = element('button', 'pick add', '+'); add.setAttribute('aria-label', category + ' 추가');
+      add.setAttribute('aria-pressed', String(!!(edit && edit.kind === 'new')));
+      add.addEventListener('click', function () { startNew(category, ''); });
+      choices.appendChild(add);
+    }
     heading.appendChild(choices);
     var collapse = element('button', '', '접기');
-    collapse.addEventListener('click', function () { activeCategory = null; renderProfile(); });
+    collapse.addEventListener('click', function () { edit = null; activeCategory = null; renderProfile(); });
     heading.appendChild(collapse); panel.appendChild(heading);
     var feedback = element('span', 'profile-status', '값을 누르면 복사하고 다음 칸으로'); feedback.setAttribute('role', 'status'); feedback.setAttribute('aria-live', 'polite');
     var bottom = element('div', 'profile-bottom');
-    if (profileError || !list.length) panel.appendChild(element('p', 'profile-empty', profileError || '등록된 정보가 없습니다. 내 이력 관리에서 직접 추가해 주세요.'));
+    if (profileError) panel.appendChild(element('p', 'profile-empty', profileError));
+    else if (edit && edit.kind === 'json') renderJson(category, feedback, bottom);
+    else if (edit && edit.kind === 'new') renderNew(category, feedback, bottom);
+    else if (!list.length) renderEmpty(category, bottom);
     else renderRecord(list[index], index, feedback, bottom);
+    if (notice && notice.until > Date.now()) { feedback.textContent = notice.text; feedback.classList.toggle('error', notice.error); }
     var footer = element('div', 'profile-footer'); footer.appendChild(feedback);
-    var manage = element('button', 'profile-manage', '내 이력 관리');
-    manage.addEventListener('click', function () {
-      try { chrome.runtime.sendMessage({ type: 'relay:options' }, function (res) {
-        if (chrome.runtime.lastError || !res || !res.ok) feedback.textContent = '설정을 열지 못했습니다. 확장 옵션을 열어 주세요.';
-      }); } catch (e) { feedback.textContent = '확장을 다시 로드한 뒤 페이지를 새로고침해 주세요.'; }
-    }); footer.appendChild(manage); bottom.appendChild(footer); panel.appendChild(bottom); placePanel();
+    if (profile && !profileError && !(edit && edit.kind === 'json')) {
+      var json = element('button', 'profile-manage', 'JSON으로 추가');
+      json.addEventListener('click', function () { edit = { kind: 'json', category: category, text: '', preview: null, error: '' }; renderProfile(); focusOn('json'); });
+      footer.appendChild(json);
+    }
+    bottom.appendChild(footer); panel.appendChild(bottom);
+    if (keepScroll) panel.scrollTop = keepScroll;
+    if (focusKey) {
+      var again = panel.querySelector('[data-focus="' + focusKey + '"]');
+      if (again) { again.focus({ preventScroll: true }); if (selStart != null && again.setSelectionRange) again.setSelectionRange(selStart, selEnd); }
+    }
+    placePanel();
   }
 
-  // 값을 누르면 복사하고 다음 빈칸 아닌 필드로 넘어간다.
-  // 핵심 동작인 '복사하고 다음'은 위치를 옮기지 않고 패널 아래에 고정해, 지금 복사할 칸과 값을 함께 보여준다.
+  function renderEmpty(category, bottom) {
+    panel.appendChild(element('p', 'profile-empty', '등록된 ' + category + ' 정보가 없습니다. 아래에서 바로 추가하거나 JSON으로 여러 개를 넣을 수 있습니다.'));
+    var dock = element('div', 'dock'), add = element('button', 'solid', '+ ' + category + ' 추가');
+    add.addEventListener('click', function () { startNew(category, ''); });
+    dock.appendChild(add); bottom.appendChild(dock);
+  }
+
+  function startNew(category, variant) {
+    var labels = variant ? P.alternates[category][variant] : P.templates[category];
+    edit = { kind: 'new', category: category, variant: variant, labels: labels.slice(), values: labels.map(function () { return ''; }) };
+    renderProfile(); focusOn('new-0');
+  }
+
+  // 새 항목: 분류의 기본 칸을 채우고 추가한다. 첫 칸이 항목 이름이 된다.
+  function renderNew(category, feedback, bottom) {
+    var draft = edit;
+    var title = element('div', 'record-title'); title.appendChild(element('strong', '', '새 ' + category)); panel.appendChild(title);
+    var alternates = P.alternates[category];
+    if (alternates) {
+      var variants = element('div', 'edit-variants');
+      [['', category === '어학' ? '공인시험' : '기본']].concat(Object.keys(alternates).map(function (name) { return [name, name]; })).forEach(function (option) {
+        var b = element('button', 'variant', option[1]); b.setAttribute('aria-pressed', String(draft.variant === option[0]));
+        b.addEventListener('click', function () { if (draft.variant !== option[0]) startNew(category, option[0]); });
+        variants.appendChild(b);
+      });
+      panel.appendChild(variants);
+    }
+    var form = element('div', 'edit-form');
+    draft.labels.forEach(function (label, i) {
+      var row = element('label', 'edit-row'); row.appendChild(element('span', 'edit-label', label));
+      var multiline = /내용|내역/.test(label);
+      var input = textInput(label, draft.values[i], multiline, 'new-' + i, function (value) { draft.values[i] = value; });
+      if (i === 0) input.maxLength = 200;
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+        else if (e.key === 'Enter' && !e.isComposing && (!multiline || e.ctrlKey || e.metaKey)) { e.preventDefault(); addNew(); }
+      });
+      row.appendChild(input); form.appendChild(row);
+    });
+    panel.appendChild(form);
+    var dock = element('div', 'dock'), btns = element('div', 'btns');
+    var cancel = element('button', 'ghost', '취소'), ok = element('button', 'solid', '추가');
+    cancel.addEventListener('click', cancelEdit); ok.addEventListener('click', addNew);
+    btns.appendChild(cancel); btns.appendChild(ok); dock.appendChild(btns); bottom.appendChild(dock);
+    feedback.textContent = '첫 칸(' + draft.labels[0] + ')이 항목 이름이 됩니다';
+    function addNew() {
+      var labels = draft.labels.slice(), values = draft.values.slice();
+      if (!values[0].trim()) { say(labels[0] + ' 칸을 입력해 주세요.', true); focusOn('new-0'); return; }
+      run(function (data) {
+        var records = data.categories[category];
+        if (records.length >= 50) throw new Error('분류별 최대 50개까지 등록할 수 있습니다.');
+        var record = { title: values[0].slice(0, 200), fields: labels.map(function (label, i) { return [label, values[i]]; }) };
+        if (records.some(function (item) { return JSON.stringify(item) === JSON.stringify(record); })) throw new Error('같은 항목이 이미 있습니다.');
+        records.push(record);
+        return data;
+      }, function (value) {
+        edit = null; selectedRecord[category] = value.categories[category].length - 1;
+        note(values[0] + ' 추가됨');
+      });
+    }
+  }
+
+  function jsonSample(category) {
+    var sample = { version: 1, categories: {} };
+    sample.categories[category] = [{ fields: P.templates[category].map(function (label) { return [label, '']; }) }];
+    return JSON.stringify(sample, null, 1);
+  }
+
+  function summarize(base, result) {
+    var added = {}, total = 0;
+    P.categories.forEach(function (name) {
+      added[name] = result.value.categories[name].slice(base.categories[name].length).map(function (record) { return record.title; });
+      total += added[name].length;
+    });
+    return { added: added, total: total, duplicates: result.duplicates, conflicts: result.conflicts };
+  }
+
+  // JSON 추가는 확인(미리보기) → 추가하고 저장 두 단계다. 확인 뒤 글을 고치면 미리보기를 지운다.
+  function renderJson(category, feedback, bottom) {
+    var draft = edit;
+    var title = element('div', 'record-title'); title.appendChild(element('strong', '', 'JSON으로 추가')); panel.appendChild(title);
+    var box = element('div', 'json');
+    box.appendChild(element('p', 'json-help', '저장 형식의 JSON을 붙여넣으세요. 여러 분류를 한 번에 넣을 수 있고 각 항목의 첫 칸이 이름이 됩니다. 이미 있는 같은 항목과 이름이 같은 항목은 건너뜁니다.'));
+    var sample = element('button', 'json-sample', category + ' 형식 예시 넣기');
+    sample.addEventListener('click', function () {
+      if (draft.text.trim()) { say('입력칸을 비운 뒤 예시를 넣을 수 있습니다.', true); return; }
+      draft.text = jsonSample(category); draft.preview = null; draft.error = ''; renderProfile(); focusOn('json');
+    });
+    box.appendChild(sample);
+    var area = textInput('붙여넣을 이력 JSON', draft.text, true, 'json', function (value) {
+      draft.text = value;
+      if (draft.preview || draft.error) { draft.preview = null; draft.error = ''; renderProfile(); }
+    });
+    area.maxLength = 400000; area.rows = 9; area.classList.add('json-area');
+    area.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) { e.preventDefault(); if (!draft.preview) check(); } });
+    box.appendChild(area);
+    if (draft.error) { var error = element('p', 'json-error', draft.error); error.setAttribute('role', 'alert'); box.appendChild(error); }
+    if (draft.preview) {
+      var preview = element('div', 'json-preview'), result = draft.preview;
+      preview.appendChild(element('strong', '', result.total ? result.total + '개를 추가합니다' : '추가할 새 항목이 없습니다'));
+      P.categories.forEach(function (name) {
+        if (!result.added[name].length) return;
+        var line = element('div', 'json-line');
+        line.appendChild(element('b', '', name + ' ' + result.added[name].length));
+        line.appendChild(element('span', '', result.added[name].join(', ')));
+        preview.appendChild(line);
+      });
+      if (result.duplicates) preview.appendChild(element('div', 'json-note', '이미 있는 같은 항목 ' + result.duplicates + '개는 건너뜁니다'));
+      if (result.conflicts.length) preview.appendChild(element('div', 'json-note', '이름이 같아 제외: ' + result.conflicts.join(', ')));
+      box.appendChild(preview);
+    }
+    panel.appendChild(box);
+    var dock = element('div', 'dock'), btns = element('div', 'btns');
+    var left, right;
+    if (!draft.preview) {
+      left = element('button', 'ghost', '취소'); left.addEventListener('click', cancelEdit);
+      right = element('button', 'solid', '확인'); right.addEventListener('click', check);
+    } else {
+      left = element('button', 'ghost', '다시 편집');
+      left.addEventListener('click', function () { draft.preview = null; renderProfile(); focusOn('json'); });
+      right = element('button', 'solid', draft.preview.total ? '추가하고 저장' : '닫기');
+      right.addEventListener('click', draft.preview.total ? commit : cancelEdit);
+    }
+    btns.appendChild(left); btns.appendChild(right); dock.appendChild(btns); bottom.appendChild(dock);
+    feedback.textContent = draft.preview ? '내용을 확인한 뒤 저장하세요' : '확인을 누르면 저장 전에 미리 보여 줍니다';
+    if (draft.preview || draft.error) {
+      var shown = box.querySelector('.json-preview, .json-error');
+      requestAnimationFrame(function () { if (shown.isConnected) panel.scrollTop = Math.max(0, shown.offsetTop - 80); });
+    }
+    function check() {
+      if (!draft.text.trim()) { draft.error = 'JSON을 붙여넣어 주세요.'; renderProfile(); return; }
+      try { draft.preview = summarize(profile, P.merge(profile, draft.text)); draft.error = ''; }
+      catch (e) { draft.preview = null; draft.error = e.message; }
+      renderProfile();
+    }
+    function commit() {
+      var text = draft.text, result = null;
+      run(function (data) {
+        var merged = P.merge(data, text);
+        result = summarize(data, merged);
+        if (!result.total) throw new Error('추가할 새 항목이 없습니다.');
+        return merged.value;
+      }, function (value) {
+        var names = P.categories.filter(function (name) { return result.added[name].length; });
+        edit = null;
+        if (names.length) { activeCategory = names[0]; selectedRecord[names[0]] = value.categories[names[0]].length - result.added[names[0]].length; }
+        note(names.map(function (name) { return name + ' ' + result.added[name].length + '개'; }).join(', ') + '를 추가했습니다');
+      });
+    }
+  }
+
+  // 값을 누르면 복사하고 다음 빈칸 아닌 필드로 넘어간다. 칸의 ✎로 그 값만 고쳐 바로 저장한다.
+  // 핵심 동작인 '복사하고 다음'은 위치를 옮기지 않고 패널 아래에 고정해, 지금 복사할 값을 함께 보여준다.
   function renderRecord(record, index, feedback, bottom) {
-    var state = progressOf(index, record);
-    var title = element('div', 'record-title');
-    title.appendChild(element('strong', '', record.title));
+    var category = activeCategory, state = progressOf(index, record);
+    var title = element('div', 'record-title'), row = element('div', 'record-row');
+    row.appendChild(element('strong', '', record.title));
+    var deleting = edit && edit.kind === 'delete' && edit.index === index;
+    if (!deleting) {
+      var remove = element('button', 'title-action', '삭제'); remove.setAttribute('aria-label', record.title + ' 삭제');
+      remove.addEventListener('click', function () { edit = { kind: 'delete', category: category, index: index, snapshot: JSON.stringify(record) }; renderProfile(); });
+      row.appendChild(remove);
+    }
+    title.appendChild(row);
     var meta = recordMeta(record);
     if (meta) title.appendChild(element('span', 'record-meta', meta));
+    if (deleting) {
+      var ask = element('div', 'delete-ask'), no = element('button', 'mini', '취소'), yes = element('button', 'mini primary', '삭제');
+      ask.appendChild(element('span', '', '이 항목을 삭제할까요?'));
+      yes.setAttribute('aria-label', '삭제 확인');
+      no.addEventListener('click', cancelEdit);
+      yes.addEventListener('click', function () {
+        var snapshot = edit.snapshot;
+        run(function (data) {
+          var records = data.categories[category];
+          if (JSON.stringify(records[index]) !== snapshot) throw new Error('다른 탭에서 이 항목이 바뀌었습니다. 확인한 뒤 다시 시도해 주세요.');
+          records.splice(index, 1);
+          return data;
+        }, function () { edit = null; selectedRecord[category] = Math.max(0, index - 1); note(record.title + ' 삭제됨'); });
+      });
+      ask.appendChild(no); ask.appendChild(yes); title.appendChild(ask);
+    }
     panel.appendChild(title);
     var rail = element('ol', 'rail'), steps = [];
     record.fields.forEach(function (pair, i) {
       var label = pair[0], value = pair[1];
       var step = element('li', 'step'), actions = element('div', 'step-actions');
+      if (edit && edit.kind === 'field' && edit.index === index && edit.field === i) {
+        var draft = edit, multiline = /내용|내역/.test(label) || /[\r\n]/.test(draft.draft) || draft.draft.length > 65;
+        var box = element('div', 'field-edit');
+        box.appendChild(element('span', 'field-label', label));
+        var input = textInput(label, draft.draft, multiline, 'field', function (next) { draft.draft = next; });
+        if (i === 0) input.maxLength = 200;
+        var ok = element('button', 'edit-ok', '✓'), no = element('button', 'edit-cancel', '✕');
+        ok.setAttribute('aria-label', label + ' 저장'); no.setAttribute('aria-label', label + ' 수정 취소');
+        input.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
+          else if (e.key === 'Enter' && !e.isComposing && (!multiline || e.ctrlKey || e.metaKey)) { e.preventDefault(); saveField(); }
+        });
+        ok.addEventListener('click', saveField); no.addEventListener('click', cancelEdit);
+        box.appendChild(input); box.appendChild(ok); box.appendChild(no); step.appendChild(box);
+        step.appendChild(element('div', 'edit-hint', multiline ? 'Ctrl+Enter 저장 · Esc 취소' : 'Enter 저장 · Esc 취소'));
+        steps.push(step); rail.appendChild(step);
+        return;
+      }
       var b = element('button', 'field'); b.setAttribute('aria-label', label + ' 복사');
       b.appendChild(element('span', 'field-label', label));
       b.appendChild(element('span', 'field-value', value || '미입력'));
       b.disabled = !value;
       b.addEventListener('click', function () { copyField(i); });
-      step.appendChild(b); step.appendChild(actions);
+      var pen = element('button', 'pen', '✎'); pen.setAttribute('aria-label', label + ' 수정');
+      pen.addEventListener('click', function () {
+        edit = { kind: 'field', category: category, index: index, field: i, snapshot: JSON.stringify(record), draft: value };
+        renderProfile(); focusOn('field');
+      });
+      step.appendChild(b); step.appendChild(pen); step.appendChild(actions);
       if (value.length > 65) {
         b.classList.add('long');
         var more = element('button', 'more', '전체 보기'); more.setAttribute('aria-expanded', 'false');
@@ -267,7 +594,28 @@
     });
     panel.appendChild(rail);
 
-    var list = profile.categories[activeCategory], target = -1;
+    function saveField() {
+      var i = edit.field, next = edit.draft, snapshot = edit.snapshot, label = record.fields[i][0];
+      if (i === 0 && !next.trim()) { say(label + ' 칸은 비울 수 없습니다.', true); focusOn('field'); return; }
+      if (next === record.fields[i][1]) { cancelEdit(); return; }
+      run(function (data) {
+        var current = data.categories[category][index];
+        if (!current || JSON.stringify(current) !== snapshot) throw new Error('다른 탭에서 이 항목이 바뀌었습니다. 취소한 뒤 다시 수정해 주세요.');
+        current.fields[i][1] = next;
+        if (i === 0) current.title = next.slice(0, 200);
+        return data;
+      }, function (value) {
+        // 고친 항목의 복사 진행은 이어서 쓴다. 다음 칸이 비었으면 그 뒤로 옮긴다.
+        var updated = value.categories[category][index], old = progress[progressKey(category, index, record)];
+        if (old && updated) {
+          if (old.next !== -1 && !updated.fields[old.next][1]) old.next = nextField(updated, old.next);
+          progress[progressKey(category, index, updated)] = old;
+        }
+        edit = null; note(label + ' 수정됨');
+      });
+    }
+
+    var list = profile.categories[category], target = -1;
     var dock = element('div', 'dock'), dockHead = element('div', 'dock-head');
     var shown = element('div', 'dock-value'), restart = element('button', 'dock-restart', '처음부터 다시'), next = element('button', 'next');
     dockHead.appendChild(shown); dockHead.appendChild(restart);
@@ -295,8 +643,8 @@
           next.textContent = '처음부터 다시'; next.setAttribute('aria-label', '처음부터 다시');
         } else {
           shown.textContent = '마지막 칸까지 복사했습니다\n다음은 ' + list[target].title;
-          next.textContent = '다음 ' + activeCategory + '으로';
-          next.setAttribute('aria-label', (target + 1) + '번 ' + activeCategory + '으로 넘어가기');
+          next.textContent = '다음 ' + category + '으로';
+          next.setAttribute('aria-label', (target + 1) + '번 ' + category + '으로 넘어가기');
           restart.hidden = false;
         }
       } else {
@@ -319,21 +667,20 @@
       var label = record.fields[i][0];
       writeClipboard(record.fields[i][1]).then(function () {
         state.done[i] = true; state.next = nextField(record, i);
-        feedback.textContent = label + ' 복사됨' + (state.next === -1 ? ' · 마지막 칸' : '');
-        if (dock.isConnected) sync(true);
-      }, function () { feedback.textContent = '복사하지 못했습니다. 다시 눌러 주세요.'; });
+        if (dock.isConnected) { say(label + ' 복사됨' + (state.next === -1 ? ' · 마지막 칸' : '')); sync(true); }
+      }, function () { say('복사하지 못했습니다. 다시 눌러 주세요.', true); });
     }
     function startOver() {
       state.done = {}; state.next = nextField(record, -1);
-      feedback.textContent = '처음 칸부터 다시 복사합니다'; panel.scrollTop = 0; sync(false);
+      say('처음 칸부터 다시 복사합니다'); panel.scrollTop = 0; sync(false);
     }
     next.addEventListener('click', function () {
       if (state.next !== -1) { copyField(state.next); return; }
       if (target === -1) { startOver(); return; }
-      var focused = root.activeElement === next, category = activeCategory, moved = target;
-      selectedRecord[category] = moved; renderProfile(); panel.scrollTop = 0;
-      var status = panel.querySelector('.profile-status'), again = panel.querySelector('.next');
-      if (status) status.textContent = (moved + 1) + '번 ' + category + '으로 넘어왔습니다';
+      var focused = root.activeElement === next, moved = target;
+      edit = null; selectedRecord[category] = moved; note((moved + 1) + '번 ' + category + '으로 넘어왔습니다');
+      renderProfile(); panel.scrollTop = 0;
+      var again = panel.querySelector('.next');
       if (focused && again) again.focus({ preventScroll: true });
     });
     restart.addEventListener('click', startOver);
@@ -427,7 +774,7 @@
     ['어학', '자격증', '수상', '교육'].forEach(function (name) {
       var button = element('button', 'category', name);
       button.setAttribute('aria-expanded', String(activeCategory === name));
-      button.addEventListener('click', function () { activeCategory = activeCategory === name ? null : name; renderProfile(); });
+      button.addEventListener('click', function () { edit = null; activeCategory = activeCategory === name ? null : name; renderProfile(); });
       categories.appendChild(button);
     });
     bar.appendChild(categories);
