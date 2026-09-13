@@ -77,6 +77,12 @@ ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하는 기능도
 엄격 비교에 실패하면 번호가 있는 응답에 한해 긴 본 질문과 작성 지침을 나눠 추가 비교한다.
 `detailedQuestion`/`detailedMatch`가 처리하는 제한된 예시 생략·띄어쓰기 규칙은 SPEC을 따른다. 유사도 점수나 답변 순서로 추정하지 않는다.
 
+복합 문항명(`1-2`)은 후보의 `label`로 보존하며 입력칸 정수 `number`와 구분한다.
+`labeledQuestion`/`questionParts`는 비교 시에만 명시적 문항명과 안내를 분리한다.
+번호 또는 문항명·본 질문·대상 유일성이 확인되면 표시된 안내의 생략과 제한된 종결 표현 차이를 허용한다.
+문자 유사도는 `suggestion`을 표시하는 데만 사용하고 `target`이나 입력 패킷으로 승격하지 않는다.
+새 규칙의 경계와 실행 검증은 `tests/gpt/matching.test.cjs`, `matching.browser.cjs`에 있다.
+
 연결 변경은 대상을 바꾸기만 하고 해제는 해당 대화의 연결만 지운다. 둘 다 기존 자소서를 수정/삭제하지 않는다.
 연결은 다음 적용에서 대상 선택을 줄이는 편의 기능이며 자동 동기화가 아니다.
 저장 버튼은 호출하지 않는다. 모델 입력 확인은 사이트 서버 저장 확인과 다르며, 사이트 입력 훅의 자동 저장 여부는 별도다.
@@ -102,8 +108,10 @@ Chrome `chrome://extensions`에서 개발자 모드를 켜고 저장소 루트�
 
 ```sh
 node --test tests/gpt/protocol.test.cjs tests/gpt/background.test.cjs tests/chat-tools/main.test.cjs
+node --test tests/gpt/matching.test.cjs
 node --test tests/relay/source.test.cjs tests/list-cards/menu.test.cjs
 node tests/gpt/browser.cjs
+node tests/gpt/matching.browser.cjs
 node tests/chat-tools/serve.cjs
 git diff --check
 ```

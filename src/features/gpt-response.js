@@ -132,11 +132,14 @@
     for (const [index, row] of mapping.rows.entries()) {
       const item = el('div', null, 'jsl-gpt-candidate');
       const head = el('div', null, 'jsl-gpt-card-head');
-      head.append(el('span', row.candidate.number ? '응답 문항 ' + row.candidate.number : '번호 없는 답변', 'jsl-gpt-badge'));
+      const number = row.candidate.label || row.candidate.number;
+      head.append(el('span', number ? '응답 문항 ' + number : '번호 없는 답변', 'jsl-gpt-badge'));
       if (mapping.rows.length > 1) head.append(el('span', (index + 1) + ' / ' + mapping.rows.length, 'jsl-gpt-count'));
       item.append(head);
       if (row.candidate.question) item.append(el('div', row.candidate.question, 'jsl-gpt-muted'));
       if (row.reason) item.append(el('div', row.reason, 'jsl-gpt-reason'));
+      const suggested = mapping.qnas.find(q => q.id === row.suggestion);
+      if (suggested) item.append(el('div', '문항 ' + suggested.number + '의 질문이 비슷합니다. 원문을 비교한 뒤 선택하세요.', 'jsl-gpt-muted'));
       // 접어 두지 않는다. 어떤 답변을 어디에 넣는지가 선택의 근거다.
       const preview = el('pre', row.candidate.text, 'jsl-gpt-preview');
       const more = button('전체 보기', () => {
@@ -148,7 +151,7 @@
       item.append(preview, more);
       const select = el('select');
       for (const [value, label] of [['', '대상 문항 선택'], ['skip', '이 답변 제외'], ...mapping.qnas.map(q => [q.id, '문항 ' + q.number + ' · ' + q.question])]) {
-        const option = el('option', label); option.value = value; select.append(option);
+        const option = el('option', (value === row.suggestion ? '추천 · ' : '') + label); option.value = value; select.append(option);
       }
       select.value = row.target || '';
       const label = el('label', null, 'jsl-gpt-label');

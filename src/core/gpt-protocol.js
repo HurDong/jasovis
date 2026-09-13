@@ -29,8 +29,45 @@
     if (prefix && Number(prefix.slice(1).find(x => x !== undefined)) === number) s = s.slice(prefix[0].length);
     return s.replace(/[\p{P}\p{S}ㆍ]/gu, ' ').replace(/\s+/g, ' ').trim();
   }
+  // 공고의 '1-2'는 편집기의 두 번째 입력칸 번호와 별개다.
+  const compound = '[1-9]\\d{0,2}(?:\\s*[-–]\\s*[1-9]\\d{0,2}){1,3}';
+  const compoundHeading = new RegExp('^(?:문항\\s*(' + compound + ')|(' + compound + ')\\s*번\\s*(?:문항)?|Q\\s*(' + compound + '))(?=\\s|[.:：)]|$)', 'i');
+  const compoundPrefix = new RegExp('^(?:\\[\\s*(?:문항\\s*|Q\\s*)?(' + compound + ')\\s*\\]|(?:문항\\s*|Q\\s*)(' + compound + ')(?:\\s*[:：.)]\\s*|\\s+))\\s*', 'i');
+  const cleanLabel = value => value.replace(/\s/g, '').replace(/–/g, '-');
+  function labeledQuestion(text) {
+    const s = normalizeQuestion(text), match = compoundPrefix.exec(s);
+    return { label: match ? cleanLabel(match[1] || match[2]) : null, text: match ? s.slice(match[0].length) : s };
+  }
   function questionHeading(text) {
-    return /^(?:문항\s*(\d+)|(\d+)\s*번\s*(?:문항)?|Q\s*(\d+))(?=\s|[.:：)\-]|$)/i.exec(text.trim());
+    const s = text.trim(), sub = compoundHeading.exec(s);
+    if (sub) return { number: null, label: cleanLabel(sub[1] || sub[2] || sub[3]), length: sub[0].length };
+    // 불완전한 복합 번호를 앞자리 정수로 잘라 읽지 않는다.
+    const single = /^(?:문항\s*(\d+)|(\d+)\s*번\s*(?:문항)?|Q\s*(\d+))(?=\s|[.:：)\-]|$)/i.exec(s);
+    if (!single || /^\s*[-–]\s*\d/.test(s.slice(single[0].length))) return null;
+    return { number: Number(single[1] || single[2] || single[3]), length: single[0].length };
+  }
+  function questionParts(text, number) {
+    // 문장 뒤에 명시적으로 표시된 안내만 분리한다. 임의의 두 번째 문장은 보존한다.
+    const marked = /([.!?。]\s*)(?:\*{1,2}|※|•)\s*/.exec(text);
+    const main = marked ? text.slice(0, marked.index + marked[1].length) : text;
+    const canonical = value => questionKey(value, number).replace(/(서술|기술|작성|설명)(?:하시오|하십시오|해\s*주세요)/g, '$1');
+    return { main: canonical(main), detail: marked ? questionKey(text.slice(marked.index + marked[0].length)) : '' };
+  }
+  function structuralMatch(a, b) {
+    return a.main.length >= 12 && a.main === b.main && (!a.detail || !b.detail || a.detail === b.detail);
+  }
+  function similarity(a, b) {
+    // 추천 전용 문자 bigram Dice. 긴 질문에도 비용이 선형이며 점수만으로 쓰지 않는다.
+    const compact = value => value.replace(/\s/g, '');
+    a = compact(a); b = compact(b);
+    if (Math.min(a.length, b.length) < 12 || Math.max(a.length, b.length) > 4000) return 0;
+    const signals = s => [...new Set(s.match(/성공|실패|포함|제외|금지|필수|반드시|장점|단점|강점|약점|찬성|반대/g) || [])].sort().join('|');
+    if (signals(a) !== signals(b)) return 0;
+    const grams = new Map();
+    for (let i = 1; i < a.length; i++) { const key = a.slice(i - 1, i + 1); grams.set(key, (grams.get(key) || 0) + 1); }
+    let common = 0;
+    for (let i = 1; i < b.length; i++) { const key = b.slice(i - 1, i + 1), count = grams.get(key) || 0; if (count) { common++; grams.set(key, count - 1); } }
+    return 2 * common / (a.length + b.length - 2);
   }
   function detailedQuestion(text, number) {
     const s = normalizeQuestion(text);
@@ -68,14 +105,14 @@
       if (block.type === 'code') {
         if (!context || !block.text.trim()) continue;
         if (/^\s*(?:#\s*)?(?:작업|저장소|구현 목표|Codex|AGENTS\.md)\s*[:：\n]/i.test(block.text)) continue;
-        result.push({ key: String(result.length), number: context.number, question: context.question, text: block.text });
+        result.push({ key: String(result.length), number: context.number, ...(context.label ? { label: context.label } : {}), question: context.question, text: block.text });
         continue;
       }
       const text = block.text.trim();
       const heading = questionHeading(text);
       if (heading && (block.type === 'heading' || !text.includes('\n'))) {
-        context = { number: Number(heading[1] || heading[2] || heading[3]), question: '', level: block.level || 3 };
-        const inline = text.slice(heading[0].length).match(/^\s*[:：]\s*(.+)$/);
+        context = { number: heading.number, label: heading.label, question: '', level: block.level || 3 };
+        const inline = text.slice(heading.length).match(/^\s*[:：]\s*(.+)$/);
         if (inline && !/^(수정|개선|최종|완성|초안)/.test(inline[1])) context.question = inline[1];
         continue;
       }
@@ -104,7 +141,9 @@
     const keys = new Set();
     for (const c of candidates) {
       if (!c || typeof c.key !== 'string' || keys.has(c.key) || typeof c.question !== 'string' ||
-          (c.number !== null && (!Number.isSafeInteger(c.number) || c.number < 1)) || (!c.number && !c.question.trim()) ||
+          (c.number !== null && (!Number.isSafeInteger(c.number) || c.number < 1)) ||
+          (c.label !== undefined && (typeof c.label !== 'string' || !/^[1-9]\d{0,2}(?:-[1-9]\d{0,2}){1,3}$/.test(c.label) || c.number !== null)) ||
+          (!c.number && !c.label && !c.question.trim()) ||
           typeof c.text !== 'string' || !c.text.trim() || c.text.length > 100000) throw Error('답변 후보 형식을 확인할 수 없습니다.');
       keys.add(c.key);
     }
@@ -112,27 +151,48 @@
   function map(candidates, state, choices = {}) {
     candidatesValid(candidates);
     const { qnas } = metadata(state);
+    const described = qnas.map(q => ({ ...q, ...labeledQuestion(q.question) }));
     const rows = candidates.map(candidate => {
-      const byNumber = qnas.find(q => q.number === candidate.number);
-      let byQuestion = candidate.question ? qnas.filter(q => {
-        const wanted = questionKey(candidate.question, candidate.number ?? q.number);
-        return wanted && questionKey(q.question, q.number) === wanted;
+      const source = labeledQuestion(candidate.question), label = candidate.label || source.label;
+      const conflict = !!(candidate.label && source.label && candidate.label !== source.label);
+      const identities = label ? described.filter(q => q.label === label) : described.filter(q => q.number === candidate.number);
+      const byIdentity = identities.length === 1 ? identities[0] : null;
+      const compatible = q => {
+        if (conflict) return false;
+        if (label) return byIdentity?.id === q.id && (candidate.number === null || candidate.number === q.number);
+        return candidate.number === null || byIdentity?.id === q.id;
+      };
+      let byQuestion = candidate.question ? described.filter(q => {
+        const wanted = questionKey(source.text, candidate.number ?? q.number);
+        return wanted && questionKey(q.text, q.number) === wanted;
       }) : [];
-      if (!byQuestion.length && candidate.question && byNumber) {
-        const detail = detailedQuestion(candidate.question, candidate.number);
-        byQuestion = qnas.filter(q => detailedMatch(detail, detailedQuestion(q.question, q.number)));
+      if (!byQuestion.length && candidate.question && byIdentity) {
+        const detail = detailedQuestion(source.text, candidate.number);
+        byQuestion = described.filter(q => detailedMatch(detail, detailedQuestion(q.text, q.number)));
+        if (!byQuestion.length) byQuestion = described.filter(q => structuralMatch(questionParts(source.text, candidate.number), questionParts(q.text, q.number)));
       }
       let target = null, reason = '';
       if (candidate.question) {
-        if (byQuestion.length === 1 && (candidate.number === null || byNumber?.id === byQuestion[0].id)) target = byQuestion[0];
+        if (byQuestion.length === 1 && compatible(byQuestion[0])) target = byQuestion[0];
         else reason = byQuestion.length > 1 ? '같은 질문이 여러 문항에 있습니다.' : '번호와 질문을 확인해 주세요.';
-      } else if (byNumber) target = byNumber;
+      } else if (byIdentity && !conflict) target = byIdentity;
       else reason = '대상 문항을 선택해 주세요.';
-      return { candidate, target: target?.id || null, reason };
+      let suggestion = null;
+      if (!target && candidate.question && !conflict) {
+        const main = questionParts(source.text, candidate.number).main;
+        const ranked = described.filter(q => !label || q.label === label).map(q => ({ id: q.id,
+          score: similarity(main, questionParts(q.text, q.number).main) })).sort((a, b) => b.score - a.score);
+        // 80% / 8%p는 추천 표시 기준이다. 선택값·입력 패킷에는 사용하지 않는다.
+        if (ranked[0]?.score >= 0.8 && ranked[0].score - (ranked[1]?.score || 0) >= 0.08) suggestion = ranked[0].id;
+      }
+      return { candidate, target: target?.id || null, reason, suggestion };
     });
     const duplicateIds = new Set(rows.filter(r => r.target && rows.filter(x => x.target === r.target).length > 1).map(r => r.target));
+    const disputedSuggestions = new Set(rows.filter(r => r.suggestion && rows.some(other => other !== r &&
+      (other.target === r.suggestion || other.suggestion === r.suggestion))).map(r => r.suggestion));
     for (const r of rows) {
       if (duplicateIds.has(r.target)) { r.target = null; r.reason = '같은 문항의 후보가 여러 개입니다. 사용할 답변만 선택해 주세요.'; }
+      if (disputedSuggestions.has(r.suggestion)) r.suggestion = null;
       if (Object.hasOwn(choices, r.candidate.key)) {
         const chosen = choices[r.candidate.key];
         if (chosen !== 'skip' && !qnas.some(q => q.id === chosen)) throw Error('선택한 문항이 없습니다.');
