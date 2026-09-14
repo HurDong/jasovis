@@ -246,7 +246,24 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
     assert.equal(await target.evaluate(() => model.currentQnaIndex), 0);
     console.log('PASS: reply for another question notifies with a jump action and opens that question');
 
-    // 11. 문항 이탈
+    // 11. 실사이트처럼 모델에 서버 CRLF가 남고 입력칸 끝 줄바꿈이 모델에서 잘린 상태에서도 보내고 받는다
+    await dash.locator('.gq-actions .jsl-action-btn', { hasText: '모두 빼기' }).click();
+    await primary.filter({ hasText: '새 질문' }).click();
+    await gpt.evaluate(() => { window.delay = 900; });
+    await target.evaluate(() => {
+      const q = model.qnas[0]; q.answer = q.answer.replace(/\n/g, '\r\n').trim();
+      document.querySelector('textarea.answer').value = q.answer + '\n';
+    });
+    assert.notEqual(await target.evaluate(() => model.qnas[0].answer), await answer());
+    await add('마지막 문장입니다', 'tone');
+    await primary.click();
+    await view.locator('.gq-sum').waitFor({ timeout: 25000 });
+    await card(1).getByRole('button', { name: '인용 1 받기' }).click();
+    await card(1).locator('.st.done').waitFor();
+    assert.equal(await answer(), sourceAnswer.replace('마지막 문장입니다', '[수정 1] 마지막 문장입니다') + '\n');
+    console.log('PASS: CRLF model answer and trimmed ng-model value do not block send or apply');
+
+    // 12. 문항 이탈
     await target.evaluate(() => history.pushState({}, '', '/resume_list'));
     await view.waitFor({ state: 'hidden' });
     assert.deepEqual(errors, []);

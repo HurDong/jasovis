@@ -9,7 +9,8 @@ JSL.register('gpt-feedback', function () {
   let state = null, identity = '', draft = null, attempt = null, items = [], selected = '', generation = 0;
   let sending = false, working = false, picking = false, notice = null, capture = null, suppressed = '', composing = false;
   let saveChain = Promise.resolve(), saveTimer, pointer = { x: 0, y: 0 }, actionBtn = null, announced = '', openWhenLoaded = '';
-  const editor = () => document.querySelector('textarea.answer');
+  // 보이는 답변란을 쓴다. 숨겨진 복제본이 있어도 사용자가 보는 칸과 비교한다.
+  const editor = () => (() => { const all = [...document.querySelectorAll('textarea.answer')]; return all.find(t => t.getClientRects().length) || all[0] || null; })();
   const wait = ms => new Promise(r => setTimeout(r, ms));
 
   // ── 버블 ──
@@ -523,7 +524,7 @@ JSL.register('gpt-feedback', function () {
       if (version !== generation) return;
       const q = activeQuestion(fresh), ta = editor();
       if (!q) throw Error('현재 문항이 바뀌었어요. 문항을 다시 열어 주세요.');
-      if (!ta || ta.value !== String(q.answer || '')) throw Error('답변을 반영하는 중이에요. 잠시 뒤 다시 눌러 주세요.');
+      if (!ta || !F.sameAnswer(q.answer, ta.value)) throw Error('답변을 반영하는 중이에요. 잠시 뒤 다시 눌러 주세요.');
       draft = F.rebase(draft, ta.value);
       F.validate(draft, true);
       if (!selected) throw Error('보낼 GPT 대화를 골라 주세요.');
@@ -563,18 +564,18 @@ JSL.register('gpt-feedback', function () {
     const result = await JSL.action('setAnswer', { number, text });
     await wait(120);
     const fresh = await JSL.getState(), q = activeQuestion(fresh);
-    return !!(result?.ok && q && String(q.answer || '') === text && editor()?.value === text);
+    return !!(result?.ok && q && F.sameAnswer(q.answer, text) && editor()?.value === text);
   }
   async function readCurrent() {
     const fresh = await JSL.getState(), q = activeQuestion(fresh), ta = editor();
     if (!q) throw Error('이 질문의 문항을 연 뒤 받아 주세요.');
-    if (!ta || ta.value !== String(q.answer || '')) throw Error('답변을 반영하는 중이에요. 잠시 뒤 다시 눌러 주세요.');
-    return q;
+    if (!ta || !F.sameAnswer(q.answer, ta.value)) throw Error('답변을 반영하는 중이에요. 잠시 뒤 다시 눌러 주세요.');
+    return { q, text: ta.value };
   }
   async function applyOne(id) {
     const quote = draft.quotes.find(q => q.id === id), item = attempt?.reply?.items[id];
     if (!quote || item?.status !== 'ready' || reviewOf(id)) return 'skip';
-    const q = await readCurrent(), answer = String(q.answer || '');
+    const { q, text: answer } = await readCurrent();
     const at = F.locate(answer, quote.text, F.hint(draft, quote));
     if (at < 0) { draft.review[id] = { state: 'stale' }; return 'stale'; }
     const next = F.replaceAt(answer, at, quote.text, item.replacement);
@@ -608,7 +609,7 @@ JSL.register('gpt-feedback', function () {
   const undo = id => task(async () => {
     const r = reviewOf(id), quote = draft.quotes.find(q => q.id === id);
     if (r?.state !== 'applied' || !quote) return;
-    const q = await readCurrent(), answer = String(q.answer || '');
+    const { q, text: answer } = await readCurrent();
     const at = F.locate(answer, r.replacement, r.at);
     if (at < 0) { toast('직접 고친 곳이라 되돌리지 않았어요', 'fail', { sub: '답변란에서 확인해 주세요.' }); return; }
     if (!(await writeAnswer(q.number, F.replaceAt(answer, at, r.replacement, r.original)))) throw Error('되돌리기를 확인하지 못했어요. 답변란을 직접 확인해 주세요.');

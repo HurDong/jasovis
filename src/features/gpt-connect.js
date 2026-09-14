@@ -42,7 +42,7 @@ JSL.register('gpt-connect', function () {
     if (sender.id !== chrome.runtime.id || sender.tab) return;
     if (message.type === 'gpt:state') {
       JSL.getState().then(state => reply({ state, documentKey,
-        editorAnswer: document.querySelector('textarea.answer')?.value ?? null }), () => reply({ state: null, documentKey }));
+        editorAnswer: ([...document.querySelectorAll('textarea.answer')].find(t => t.getClientRects().length) || document.querySelector('textarea.answer'))?.value ?? null }), () => reply({ state: null, documentKey }));
       return true;
     }
     if (message.type !== 'gpt:write' && message.type !== 'gpt:undo' && message.type !== 'gpt:review-question') return;

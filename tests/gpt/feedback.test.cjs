@@ -121,3 +121,13 @@ test('v1 초안이나 알 수 없는 종류는 초안 형식 오류다', () => {
   assert.throws(() => F.validate({ ...d, version: 1 }), /초안 형식/);
   assert.throws(() => F.validate({ ...d, quotes: [{ ...d.quotes[0], kind: 'polish' }] }), /인용 원문/);
 });
+test('사이트 모델의 CRLF·ng-model 앞뒤 공백 차이는 같은 답변으로 보고 내용 차이는 거부한다', () => {
+  const s = state(); s.qnas[0].answer = '첫 줄입니다.\r\n\r\n둘째 줄입니다.';
+  const d = F.create(s);
+  assert.equal(d.answer, '첫 줄입니다.\n\n둘째 줄입니다.');
+  assert.ok(F.sameAnswer(s.qnas[0].answer, '첫 줄입니다.\n\n둘째 줄입니다.\n'));
+  assert.equal(F.sameAnswer(s.qnas[0].answer, '첫 줄입니다.\n\n둘째 줄이에요.'), false);
+  const view = F.rebase(d, '첫 줄입니다.\n\n둘째 줄입니다.  '); F.add(view, 0, 6);
+  assert.doesNotThrow(() => F.check(view, s));
+  s.qnas[0].answer += '!'; assert.throws(() => F.check(view, s), /답변이 바뀌었/);
+});

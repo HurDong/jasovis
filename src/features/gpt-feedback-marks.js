@@ -42,7 +42,7 @@
   }
   function paint() {
     frame = 0;
-    const current = document.querySelector('textarea.answer');
+    const current = (() => { const all = [...document.querySelectorAll('textarea.answer')]; return all.find(t => t.getClientRects().length) || all[0] || null; })();
     if (!ranges.length || !current || !current.isConnected) { if (host) host.style.display = 'none'; ta = current; return; }
     ensure();
     if (current !== ta) { ta = current; painted = ''; }

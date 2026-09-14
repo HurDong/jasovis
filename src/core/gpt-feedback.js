@@ -8,6 +8,13 @@
     tone: { label: 'AI 티', request: '뜻과 사실은 유지하고, 상투적이거나 번역투인 표현을 실제 지원자가 쓸 법한 담백한 문장으로 바꿔 주세요.' },
     ask: { label: '질문', request: '' }
   };
+  // 사이트 모델에는 서버가 준 CRLF가 남아 있을 수 있고, textarea는 LF로 보여준다. Angular ng-model은
+  // 입력칸 값을 앞뒤 공백을 잘라 모델에 올린다. 이 두 차이만 같은 답변으로 본다. 위치는 항상 입력칸 기준이다.
+  const lf = text => String(text || '').replace(/\r\n?/g, '\n');
+  function sameAnswer(model, view) {
+    const a = lf(model), b = String(view ?? '');
+    return a === b || a.trim() === b.trim();
+  }
   function current(state) {
     const active = state?.qnas?.filter(q => q.active);
     if (!state?.resume?.id || active?.length !== 1) fail('현재 문항을 읽지 못했습니다. 문항을 연 뒤 다시 시도해 주세요.');
@@ -16,7 +23,7 @@
   function create(state) {
     const q = current(state);
     return { version: 2, resumeId: String(state.resume.id), question: { id: String(q.id), number: q.number, question: q.question },
-      answer: String(q.answer || ''), quotes: [], nextId: 1, review: {} };
+      answer: lf(q.answer), quotes: [], nextId: 1, review: {} };
   }
   function validate(d, sending = false) {
     if (d?.version !== 2 || !/^\d+$/.test(d.resumeId) || !d.question?.id || !Number.isInteger(d.question.number) ||
@@ -44,7 +51,7 @@
     const q = current(state);
     if (String(state.resume.id) !== d.resumeId || String(q.id) !== d.question.id || q.number !== d.question.number || q.question !== d.question.question)
       fail('현재 문항이 바뀌었습니다. 해당 문항에서 다시 열어 주세요.');
-    if (String(q.answer || '') !== d.answer) fail('답변이 바뀌었습니다. 다시 보내 주세요.');
+    if (!sameAnswer(q.answer, d.answer)) fail('답변이 바뀌었습니다. 다시 보내 주세요.');
     return q;
   }
   function occurrences(text, part) {
@@ -179,6 +186,6 @@
     if (at < 0 || text.slice(at, at + from.length) !== from) fail('원문이 바뀌어 넣지 않았습니다.');
     return text.slice(0, at) + to + text.slice(at + from.length);
   }
-  root.JSLFeedback = { MARK, KINDS, current, create, validate, check, add, rebase, locate, prompt, isRequest, parseReply, hint, replaceAt };
+  root.JSLFeedback = { MARK, KINDS, sameAnswer, current, create, validate, check, add, rebase, locate, prompt, isRequest, parseReply, hint, replaceAt };
   if (typeof module !== 'undefined') module.exports = root.JSLFeedback;
 })(globalThis);

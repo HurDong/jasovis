@@ -1390,6 +1390,7 @@ Canvas를 사용할 수 없어도 호출·닫기 동작과 라벨은 유지한�
 - **순수 계약** `src/core/gpt-feedback.js`(`JSLFeedback`): 초안 version 2 `{resumeId, question, answer, quotes[{id,start,end,text,kind:'context'|'tone'|'ask',feedback,lost?}], nextId, review, attempt?}`.
   `rebase`는 편집된 답변에서 기록 위치에 같은 원문이 있으면 유지, 없으면 **정확히 한 번** 있는 곳으로 옮기고, 아니면 `lost`로 둔다(추측하지 않음).
   전송은 `lost` 없음·질문 종류 메모 필수·지원서/문항/모델 답변/입력란 원문 일치를 요구한다. version 1 초안은 새로 만든다.
+  모델 답변과 입력란 비교는 `sameAnswer`로 서버 CRLF와 ng-model 앞뒤 공백 잘림만 같은 답변으로 본다. 인용 위치·교체는 항상 보이는 입력란 값 기준이다.
 - **요청 형식**: 첫 줄 `[자비스 요청]` 표지, 문항 질문, 규칙(대화에 없는 사실 생성 금지·근거 부족 시 확인 필요·인용 밖 수정 금지),
   답 형식 `### 인용 N / 진단: / 수정안: 코드 블록 / 확인 필요:`, 인용마다 `[인용 N · 종류]` 원문·같은 문단 앞뒤 120자 문맥·종류별 요청·덧붙임.
   내부 지원서/문항 ID·revision·요청 ID는 넣지 않는다. 표지는 응답 판별과 기존 적용 패널 제외에만 쓴다.
