@@ -5,15 +5,17 @@
   let current = P.conversation(location.href), busy = false, timer;
   function extract(body) {
     const blocks = [];
+    // 출처 배지는 ChatGPT UI다. 일반 링크의 글자와 질문 조건은 그대로 읽는다.
+    const ignored = 'button, [data-jsl-gpt], script, style, [data-testid="webpage-citation-pill"]';
     // 블록의 표시 텍스트만 읽는다. pre 안에서는 code.textContent만 사용한다.
     function text(node) {
       if (node.nodeType === 3) return node.textContent;
-      if (node.nodeType !== 1 || node.matches('button, [data-jsl-gpt], script, style')) return '';
+      if (node.nodeType !== 1 || node.matches(ignored)) return '';
       if (node.tagName === 'BR') return '\n';
       return Array.from(node.childNodes, text).join('');
     }
     function walk(node) {
-      if (node.nodeType !== 1 || node.matches('button, [data-jsl-gpt], script, style')) return;
+      if (node.nodeType !== 1 || node.matches(ignored)) return;
       if (node.matches('table, hr')) { blocks.push({ type: 'boundary' }); return; }
       if (node.tagName === 'PRE') {
         const codes = node.querySelectorAll('code');
