@@ -70,6 +70,20 @@ const block = (index, overrides = {}) => F.block(index + 1, { heading: '문항 '
     assert.equal(await target.evaluate(() => saves), 0);
     assert.deepEqual(errors, []);
     console.log('PASS: parenthesized notice omission, NBSP and nested parentheses, four exact MV3 writes without mapping or save');
+    await gpt.getByRole('button', { name: '연결 해제', exact: true }).click(); await status('연결을 해제');
+    await target.evaluate(qnas => { model.qnas = qnas; model.currentQnaIndex = 0; }, F.languageQnas);
+    await replace(F.languagePairs.map((p, i) => F.block(i + 1, { question: p.response, answer: p.answer, language: 'text' })).join(''));
+    await apply(); await status('연결할 지원서를 선택');
+    await gpt.locator('[data-jsl-gpt] button').filter({ hasText: '/ 탭' }).click();
+    await status('문항 1, 2, 3, 4 입력 확인');
+    assert.equal(await gpt.getByRole('combobox').count(), 0);
+    assert.deepEqual(await answers(), F.languagePairs.map(p => p.answer));
+    assert.deepEqual(await target.evaluate(() => model.qnas.map(q => q.question)), F.languagePairs.map(p => p.source));
+    assert.equal(await target.evaluate(() => saves), 0);
+    await gpt.getByRole('button', { name: '되돌리기', exact: true }).click(); await status('되돌림');
+    assert.deepEqual(await answers(), F.languageQnas.map(q => q.answer));
+    assert.deepEqual(errors, []);
+    console.log('PASS: four question identities survive language limits and omitted notice; exact writes and undo, no save');
   } finally {
     await context.close();
     assert.equal(path.dirname(path.resolve(profile)), path.resolve(os.tmpdir()));

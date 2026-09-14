@@ -48,3 +48,14 @@ const wrappedPairs = [
   response: main.replace('기술해주세요', '기술해 주세요'), answer: '괄호 안내 가상 답변 ' + (i + 1) + '\n' }));
 const wrappedQnas = wrappedPairs.map((p, i) => ({ id: 301 + i, number: i + 1, question: p.source, answer: '기존 ' + (i + 1) }));
 module.exports = { questions, answers, block, full, turn, chat, resume, detailedPairs, compoundPairs, compoundQnas, wrappedPairs, wrappedQnas };
+// 한 본 질문에 분량 언어와 안내 표시가 달라도 같은 입력 대상을 가리키는 사례.
+const languagePairs = [
+  '예시기업을 선택한 이유와 입사 후 이루고 싶은 목표를 기술하십시오.',
+  '자신의 성장 과정에서 큰 영향을 준 경험과 인물을 포함하여 기술하시기 바랍니다.',
+  '최근 관심을 갖는 사회 현상을 선택하고 본인의 생각을 기술해 주시기 바랍니다.',
+  '새로운 방식을 시도하여 목표를 달성한 경험과 본인의 행동을 기술하십시오.'
+].map((main, i) => ({ response: main, source: (i + 1) + '. ' + main +
+  (i === 1 ? ' (※책 속 인물도 가능)' : '') + [' (700자 이내 (영문작성 시 1400자))', ' [국문 1500자 이내 / 영문 3000자]', ' （1000자 이내（영문 작성 시 2000자））', ' (한글 1000자) (영문 작성 시 2000자)'][i],
+  answer: '[가상 작성 ' + (i + 1) + ']\n  답변 원문\t유지\n' }));
+module.exports.languagePairs = languagePairs;
+module.exports.languageQnas = languagePairs.map((p, i) => ({ id: 401 + i, number: i + 1, question: p.source, answer: '기존 ' + (i + 1) }));

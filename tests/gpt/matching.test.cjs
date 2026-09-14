@@ -10,6 +10,29 @@ const parse = (label, question, text = '가상 답변') => P.parse([
 ]);
 const all = () => pairs.flatMap(p => parse(p.label, p.response, p.answer)).map((c, i) => ({ ...c, key: String(i) }));
 
+test('문항 정체성은 본 질문·번호로 확인하고 언어별 분량과 표시 안내는 분리', () => {
+  const F = require('./fixtures.cjs');
+  const local = { resume: { id: 77 }, qnas: F.languageQnas };
+  const candidates = F.languagePairs.flatMap((p, i) => parse(i + 1, p.response, p.answer)).map((c, i) => ({ ...c, key: String(i) }));
+  const packet = P.map(candidates, local).packet;
+  assert.deepEqual(packet.answers.map(a => a.id), ['401', '402', '403', '404']);
+  assert.deepEqual(packet.answers.map(a => a.question), F.languagePairs.map(p => p.source));
+  assert.deepEqual(packet.answers.map(a => a.text), F.languagePairs.map(p => p.answer));
+  const q = F.languagePairs[0].response;
+  for (const suffix of [' (700자 이내 (영문작성 시 1400자))', ' [국문 700자 / 영문 1400자]', ' （700자 이내（영문 작성 시 1400자））', ' (700자) (영문 1400자)']) {
+    assert.equal(P.normalizeQuestion(q + suffix), q);
+    assert.equal(P.normalizeQuestion(P.normalizeQuestion(q + suffix)), q);
+  }
+  for (const suffix of [' (700자 이내 (영문작성 시 1400자, 반드시 경험 포함))', ' (700자 이내 (영문작성 시 1400자)', ' (700자 이내 [영문 1400자))', ' (영문 자료를 포함)', ' (700자 이내) 추가로 실패 원인을 설명하십시오.']) {
+    assert.equal(P.normalizeQuestion(q + suffix), q + suffix);
+    const changed = structuredClone(local); changed.qnas[0].question = q + suffix;
+    assert.equal(P.map([candidates[0]], changed).packet, null);
+  }
+  assert.equal(P.map([{ ...candidates[0], number: 2 }], local).packet, null);
+  const duplicate = structuredClone(local); duplicate.qnas[1].question = '2. ' + q + ' (영문 1400자)';
+  assert.equal(P.map([candidates[0]], duplicate).packet, null);
+});
+
 test('복합 번호 13개와 명시적 안내 생략을 대응하고 입력 원문을 보존', () => {
   const candidates = all();
   assert.deepEqual(candidates.map(c => c.label), pairs.map(p => p.label));

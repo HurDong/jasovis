@@ -14,7 +14,38 @@
     // 한 덩어리의 수치 제한. 사이트는 '최소 500자, 최대 2,000자 입력가능'처럼 여러 덩어리를 잇기도 한다.
     const one = '(?:(?:공백\\s*(?:포함|제외)|최대|최소)\\s*)?\\d[\\d,]*\\s*(?:자|바이트|bytes?)(?:\\s*(?:이내|이상|이하))?(?:\\s*[,·/]?\\s*공백\\s*(?:포함|제외))?';
     const limit = one + '(?:\\s*[,·/~∼〜-]?\\s*' + one + ')*(?:\\s*(?:입력|작성)\\s*가능)?';
-    s = s.replace(new RegExp('\\s*[（(\\[]\\s*' + limit + '\\s*[）)\\]]\\s*$', 'i'), '');
+    // 포맷이 아니라 내용으로 분량 메타를 판별한다. 괄호는 경계만 제공한다.
+    const language = '(?:국문|한글|영문|영어)(?:\\s*작성)?(?:\\s*시|\\s*기준)?\\s*[:：]?\\s*';
+    const amounts = new RegExp('^(?:' + language + ')?' + limit + '(?:\\s*[,;/·]?\\s*' + language + limit + ')*$', 'i');
+    const bareRange = /^최소\s*\d[\d,]*\s*[~∼〜-]\s*최대\s*\d[\d,]*$/;
+    // 끝의 균형 잡힌 그룹을 통째로 검사한다. 일부 괄호나 모르는 조건은 버리지 않는다.
+    const closes = { ')': '(', '）': '（', ']': '[' };
+    while (Object.hasOwn(closes, s.at(-1))) {
+      const stack = [];
+      let start = -1;
+      for (let i = s.length - 1; i >= 0; i--) {
+        const ch = s[i];
+        if (Object.hasOwn(closes, ch)) stack.push(closes[ch]);
+        else if ('(（['.includes(ch)) {
+          if (stack.pop() !== ch) break;
+          if (!stack.length) { start = i; break; }
+        }
+      }
+      if (start < 0) break;
+      // 닫히지 않은 바깥 괄호의 내부만 잘라내지 않는다. '2)' 같은 문항 접두사는 허용한다.
+      const prefixStack = [];
+      for (const ch of s.slice(0, start)) {
+        if ('(（['.includes(ch)) prefixStack.push(ch);
+        else if (Object.hasOwn(closes, ch) && prefixStack.length) {
+          if (prefixStack.at(-1) !== closes[ch]) break;
+          prefixStack.pop();
+        }
+      }
+      if (prefixStack.length) break;
+      const content = s.slice(start + 1, -1).replace(/[()（）\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!amounts.test(content) && !bareRange.test(content)) break;
+      s = s.slice(0, start).trimEnd();
+    }
     s = s.replace(new RegExp('\\s*(?:글자\\s*수\\s*제한|분량)\\s*[:：]\\s*' + limit + '\\s*$', 'i'), '');
     // 단위가 없어도 최소/최대가 모두 명시된 끝의 범위는 사이트 분량 메타다.
     s = s.replace(/\s*[（(\[]\s*최소\s*\d[\d,]*\s*[~∼〜-]\s*최대\s*\d[\d,]*\s*[）)\]]\s*$/, '');
