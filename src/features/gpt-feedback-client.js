@@ -4,6 +4,13 @@
   if (window.__jslFeedbackClient) return;
   window.__jslFeedbackClient = true;
   const documentKey = crypto.randomUUID(), attempts = new Map();
+  // 뒤로 간 탭에서도 답 화면을 그리게 해 달라는 표시(gpt-render-main.js가 읽는다). 전달·감시 중에만 켠다.
+  const rendering = new Set();
+  function keepRendering(reason, on) {
+    if (on) rendering.add(reason); else rendering.delete(reason);
+    document.documentElement.toggleAttribute('data-jsl-keep-rendering', rendering.size > 0);
+  }
+  const retryable = text => Object.assign(Error(text), { retry: true });
   const conversation = () => JSLGpt.conversation(location.href);
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const normalized = s => String(s || '').replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ').trim();
@@ -53,12 +60,28 @@
       const selection = window.getSelection(), range = document.createRange();
       range.selectNodeContents(editor); range.collapse(false);
       selection.removeAllRanges(); selection.addRange(range);
-      if (!document.execCommand('insertText', false, text)) throw Error('GPT 입력창에 질문을 넣지 못했습니다.');
+      if (!document.execCommand('insertText', false, text)) throw retryable('GPT 입력창에 질문을 넣지 못했습니다.');
     }
   }
+  // 뒤 탭 전달이 반영되지 않았을 때만 넣은 글을 지운다. 지운 것이 확인되면 워커가 앞 탭으로 다시 시도한다.
+  function clearInserted(editor) {
+    try {
+      editor.focus();
+      if (editor instanceof HTMLTextAreaElement) {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(editor, '');
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
+      } else {
+        const selection = window.getSelection(), range = document.createRange();
+        range.selectNodeContents(editor); selection.removeAllRanges(); selection.addRange(range);
+        document.execCommand('delete');
+      }
+      return !read(editor);
+    } catch { return false; }
+  }
   async function deliver(message) {
-    let clicked = false, inserted = false, edited = false, watchedEditor;
+    let clicked = false, inserted = false, edited = false, asked = false, watchedEditor;
     const onEdit = () => { edited = true; };
+    keepRendering('deliver:' + message.attempt, true);
     try {
       if (message.documentKey !== documentKey || conversation() !== message.conversation) throw Error('GPT 대화가 변경되었습니다.');
       if (typeof message.prompt !== 'string' || !message.prompt.trim() || message.prompt.length > 300000) throw Error('전달할 질문 형식을 확인해 주세요.');
@@ -73,12 +96,14 @@
       let sendButton;
       const buttonDeadline = Date.now() + 2400;
       while (Date.now() < buttonDeadline) {
-        if (conversation() !== message.conversation || !editor.isConnected || edited || !sameText(read(editor), expected)) throw Error('GPT 입력 내용 또는 대화가 변경되어 전송을 멈췄습니다.');
+        if (conversation() !== message.conversation || !editor.isConnected || edited) throw Error('GPT 입력 내용 또는 대화가 변경되어 전송을 멈췄습니다.');
+        if (!sameText(read(editor), expected)) throw retryable('GPT 입력창에 넣은 질문이 그대로 반영되지 않아 전송을 멈췄습니다.');
         sendButton = button(form);
         if (sendButton) break;
         await wait(100);
       }
-      if (!sendButton) throw Error('질문은 GPT 입력창에 넣었지만 전송 버튼을 확인하지 못했습니다. GPT에서 직접 확인해 주세요.');
+      if (!sendButton) throw retryable('질문은 GPT 입력창에 넣었지만 전송 버튼을 확인하지 못했습니다. GPT에서 직접 확인해 주세요.');
+      asked = true;
       const authorized = await chrome.runtime.sendMessage({ type: 'feedback:authorize', attempt: message.attempt,
         conversation: message.conversation, documentKey });
       if (!authorized?.ok || !authorized.authorized) throw Error(authorized?.error || '전송 준비가 변경되었습니다.');
@@ -98,8 +123,12 @@
         await wait(100);
       }
       return { status: 'unknown', error: '전송 버튼은 눌렀지만 새 메시지를 확인하지 못했습니다. GPT 대화를 확인해 주세요. 자동으로 다시 보내지 않습니다.' };
-    } catch (e) { return { status: clicked ? 'unknown' : 'blocked', error: e.message + (inserted && !clicked ? '\n질문은 GPT 입력창에 남아 있습니다. 내용을 확인한 뒤 이어서 처리해 주세요.' : '') }; }
-    finally { watchedEditor?.removeEventListener('input', onEdit); }
+    } catch (e) {
+      if (message.background && e.retry && !clicked && !asked && !edited && (!inserted || clearInserted(watchedEditor)))
+        return { status: 'blocked', retry: true, error: e.message };
+      return { status: clicked ? 'unknown' : 'blocked', error: e.message + (inserted && !clicked ? '\n질문은 GPT 입력창에 남아 있습니다. 내용을 확인한 뒤 이어서 처리해 주세요.' : '') };
+    }
+    finally { watchedEditor?.removeEventListener('input', onEdit); keepRendering('deliver:' + message.attempt, false); }
   }
   // ── 보낸 요청의 답 감시 ──
   // 보낸 메시지 바로 다음 assistant 메시지만 읽는다. 다음 사용자 메시지 뒤의 답은 이 요청의 답이 아니다.
@@ -108,12 +137,12 @@
     const blocks = [];
     const text = node => {
       if (node.nodeType === 3) return node.textContent;
-      if (node.nodeType !== 1 || node.matches('button, script, style, [data-jsl-gpt], [data-jsl-feedback]')) return '';
+      if (node.nodeType !== 1 || node.matches('button, script, style, [data-jsl-gpt]')) return '';
       if (node.tagName === 'BR') return '\n';
       return Array.from(node.childNodes, text).join('');
     };
     const walk = node => {
-      if (node.nodeType !== 1 || node.matches('button, script, style, [data-jsl-gpt], [data-jsl-feedback]')) return;
+      if (node.nodeType !== 1 || node.matches('button, script, style, [data-jsl-gpt]')) return;
       if (node.matches('table, hr')) { blocks.push({ type: 'boundary', text: '' }); return; }
       if (node.tagName === 'PRE') {
         const codes = node.querySelectorAll('code');
@@ -152,6 +181,8 @@
     if (watching.has(attempt)) return;
     const job = { messageId, line, last: '', timer: null };
     watching.set(attempt, job);
+    keepRendering('watch:' + attempt, true);
+    const stop = () => { watching.delete(attempt); keepRendering('watch:' + attempt, false); };
     const tick = async () => {
       if (!watching.has(attempt)) return;
       const { mine, answer } = conversation() ? answerAfter(messageId, line) : { mine: null };
@@ -160,8 +191,7 @@
         const done = finished(answer), signature = (done ? 'c:' : 's:') + body.textContent.length;
         if (signature !== job.last) {
           const outcome = await report(attempt, messageId, done ? 'complete' : 'streaming', blocks);
-          if (outcome === 'stop') { watching.delete(attempt); return; }
-          if (outcome === 'done') { watching.delete(attempt); offerReturn(attempt, messageId, line); return; }
+          if (outcome === 'stop' || outcome === 'done') { stop(); return; }
           if (outcome === 'ok') job.last = signature;
         }
       }
@@ -169,36 +199,6 @@
       job.timer = setTimeout(tick, 900);
     };
     tick();
-  }
-  // 답 아래에 자소설로 돌아가는 버튼을 둔다. React가 답을 다시 그려도 30분 동안은 다시 붙인다.
-  function offerReturn(attempt, messageId, line) {
-    const until = Date.now() + 1800000;
-    let clicked = false;
-    const place = () => {
-      if (clicked || Date.now() > until || !conversation()) return;
-      const { answer } = answerAfter(messageId, line);
-      if (answer && !document.querySelector('[data-jsl-feedback="' + attempt + '"]')) {
-        const panel = document.createElement('div');
-        panel.dataset.jslFeedback = attempt;
-        const row = document.createElement('div'); row.className = 'jsl-gpt-actions';
-        const go = document.createElement('button'); go.type = 'button'; go.className = 'jsl-gpt-primary'; go.textContent = '자소설에서 받기 ↗';
-        const note = document.createElement('span'); note.className = 'jsl-gpt-muted'; note.textContent = '자비스 · 인용별 수정안을 자소설 GPT 질문 화면에서 받거나 뺄 수 있어요';
-        go.addEventListener('click', async () => {
-          go.disabled = true;
-          try {
-            const result = await chrome.runtime.sendMessage({ type: 'feedback:return', attempt });
-            if (!result?.ok) throw Error(result?.error || '자소설 탭을 열지 못했습니다.');
-            note.textContent = '자소설 탭에서 받기·빼기를 이어서 하세요.';
-          } catch (e) { note.textContent = e.message.includes('Extension context') ? '확장이 다시 로드되었습니다. 페이지를 새로고침해 주세요.' : e.message; }
-          finally { go.disabled = false; }
-        });
-        row.append(go, note); panel.append(row);
-        const body = answer.querySelector('.markdown') || answer;
-        if (body === answer) answer.append(panel); else body.after(panel);
-      }
-      setTimeout(place, 1500);
-    };
-    place();
   }
   async function resume() {
     if (!conversation()) return;
@@ -226,8 +226,10 @@
       return;
     }
     if (message?.type !== 'feedback:deliver') return;
-    if (!attempts.has(message.attempt)) attempts.set(message.attempt, deliver(message));
-    attempts.get(message.attempt).then(reply);
+    // 뒤 탭 시도와 앞 탭 재시도는 서로 다른 전달이다. 같은 전달의 중복 메시지만 한 번으로 묶는다.
+    const job = message.attempt + (message.background ? ':background' : ':front');
+    if (!attempts.has(job)) attempts.set(job, deliver(message));
+    attempts.get(job).then(reply);
     return true;
   });
   let last = '';

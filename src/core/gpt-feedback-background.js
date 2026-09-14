@@ -1,4 +1,5 @@
-// 자소설 → 이미 연결된 웹 GPT → 자소설. 사용자가 보내기를 누른 요청만 전달하고, 그 요청의 답만 읽어 보관한다.
+// 자소설 → 이미 연결된 웹 GPT → 자소설. 사용자가 보내기를 누른 질문만 전달하고, 그 질문의 답만 읽어 보관한다.
+// 자소설 탭마다 질문 칸은 하나다. 새로 보내면 이전 질문 기록을 지운다. 탭은 옮기지 않는다.
 (function () {
   'use strict';
   const F = JSLFeedback, prefix = 'feedback:', operations = new Set();
@@ -6,8 +7,8 @@
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const get = async k => (await session.get(k))[k];
   const put = (k, value) => session.set({ [k]: value });
-  const draftKey = (tab, d) => `${prefix}draft:${tab}:${d.resumeId}:${d.question.id}`;
   const attemptKey = id => prefix + 'attempt:' + id;
+  const slotKey = tab => prefix + 'slot:' + tab;
   const validId = id => typeof id === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(id);
   const info = tab => chrome.tabs.sendMessage(tab, { type: 'feedback:page-info' }, { frameId: 0 });
   const BLOCK_TYPES = new Set(['heading', 'text', 'code', 'boundary']);
@@ -55,11 +56,12 @@
   async function freshAttempt(record) {
     const data = await readTarget(record.sourceTab);
     if (data.documentKey !== record.documentKey) throw Error('자소설 페이지가 새로고침되었습니다. 다시 보내 주세요.');
-    F.check(record.draft, data.state);
-    if (data.editorAnswer !== record.draft.answer) throw Error('답변 입력란의 원문이 바뀌거나 읽히지 않습니다. 다시 보내 주세요.');
+    F.check(record.ask, data.state);
+    if (data.editorAnswer !== record.ask.answer) throw Error('답변 입력란의 원문이 바뀌거나 읽히지 않습니다. 다시 보내 주세요.');
     const link = await binding(record.conversation);
     if (!link || link.revision !== record.revision || !JSLGpt.sameQuestions(link, data.state)) throw Error('GPT 연결 또는 지원서 문항이 변경되었습니다. 대화를 다시 골라 주세요.');
   }
+  // 열린 대화 탭을 쓰고, 없으면 뒤에 연다. 보내는 동안 사용자의 탭은 옮기지 않는다.
   async function targetTab(conversation) {
     const tabs = (await chrome.tabs.query({ url: 'https://chatgpt.com/*' })).filter(t => JSLGpt.conversation(t.url) === conversation);
     if (tabs.length > 1) throw Error('같은 GPT 대화가 여러 탭에 열려 있습니다. 사용할 탭 하나만 남겨 주세요.');
@@ -67,7 +69,7 @@
     const meta = (await chrome.storage.local.get('feedback-chat:' + conversation))['feedback-chat:' + conversation];
     const url = meta?.url && JSLGpt.conversation(meta.url) === conversation && new URL(meta.url).origin === 'https://chatgpt.com'
       ? meta.url : 'https://chatgpt.com/c/' + conversation;
-    return chrome.tabs.create({ url });
+    return chrome.tabs.create({ url, active: false });
   }
   async function activate(tabId) {
     const tab = await chrome.tabs.update(tabId, { active: true });
@@ -77,9 +79,10 @@
   function summary(id, record) {
     if (!record) return null;
     return { id, status: record.status, error: record.error || '', conversation: record.conversation, sentAt: record.sentAt || null,
-      seen: record.progress?.seen || [], streaming: !!record.progress?.streaming, reply: record.reply || null, lost: !!record.lost };
+      streaming: !!record.progress?.streaming, reply: record.reply || null, lost: !!record.lost, review: record.review || null,
+      request: record.request ? structuredClone(record.request) : null };
   }
-  const lineOf = record => F.headline(record.request.number, record.request.quotes.length);
+  const lineOf = record => F.headline(record.request.number);
   // 확인 불가로 멈춘 요청을 사용자가 "보냈어요"라고 확인한 경우. 다시 보내지 않고, 열린 대화에서 첫 줄로 보낸 메시지를 찾아 답을 기다린다.
   async function claim(message, sender) {
     if (!validId(message.attempt)) throw Error('요청 기록을 찾지 못했습니다.');
@@ -107,9 +110,25 @@
     }
     catch { /* 자소설 탭이 닫혔거나 새로고침 중이면 다음 불러오기에서 반영된다. */ }
   }
+  async function waitReady(tabId, conversation) {
+    let page;
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      try { page = await info(tabId); } catch { /* 새 탭의 콘텐츠 스크립트 로드를 기다린다. */ }
+      if (page?.conversation === conversation && page.ready) return page;
+      await wait(250);
+    }
+    throw Error('GPT 입력창을 준비하지 못했습니다. 로그인과 페이지 로딩을 확인해 주세요.');
+  }
+  // 질문 칸은 하나다. GPT에 갔을 수 있는 질문만 칸을 차지하고, 이전 질문(답을 기다리던 것 포함)은 지운다.
+  async function occupy(tab, id) {
+    const old = await get(slotKey(tab));
+    if (old && old !== id) await session.remove(attemptKey(old));
+    await put(slotKey(tab), id);
+  }
   async function send(message, sender, data) {
-    const d = F.validate(message.draft, true), id = message.attempt;
-    F.check(d, data.state);
+    const a = F.validate(message.ask), id = message.attempt;
+    F.check(a, data.state);
     if (!validId(id) || !validId(message.conversation)) throw Error('보내기를 다시 눌러 주세요.');
     const previous = await get(attemptKey(id));
     if (previous) {
@@ -117,38 +136,39 @@
       return { status: previous.status === 'sent' || previous.status === 'blocked' ? previous.status : 'unknown',
         error: previous.error || '이미 처리한 요청입니다. GPT 대화를 확인해 주세요.' };
     }
-    const lock = 'conversation:' + message.conversation, resumeLock = 'resume:' + d.resumeId;
+    const lock = 'conversation:' + message.conversation, resumeLock = 'resume:' + a.resumeId;
     if (locks.has(lock) || locks.has(resumeLock)) throw Error('이 대화 또는 지원서에서 다른 작업을 처리 중입니다.');
     locks.add(lock); locks.add(resumeLock);
-    const record = { sourceTab: sender.tab.id, documentKey: data.documentKey, conversation: message.conversation, draft: d,
-      request: { resumeId: d.resumeId, questionId: d.question.id, number: d.question.number,
-        quotes: d.quotes.map(q => ({ id: q.id, kind: q.kind, text: q.text })) },
+    const record = { sourceTab: sender.tab.id, documentKey: data.documentKey, conversation: message.conversation, ask: a,
+      request: { resumeId: a.resumeId, questionId: a.question.id, number: a.question.number,
+        quote: { text: a.quote.text, start: a.quote.start }, request: a.request },
       status: 'preparing', created: Date.now() };
-    let sourceWindow;
+    let flashed = false;
     try {
       const link = await binding(record.conversation);
-      if (!link || link.resume.id !== d.resumeId) throw Error('이 지원서와 연결된 GPT 대화를 골라 주세요.');
+      if (!link || link.resume.id !== a.resumeId) throw Error('이 지원서와 연결된 GPT 대화를 골라 주세요.');
       record.revision = link.revision;
       await put(attemptKey(id), record);
       await freshAttempt(record);
-      sourceWindow = sender.tab.windowId;
       const tab = await targetTab(record.conversation);
       record.targetTab = tab.id;
-      await activate(tab.id);
-      let page;
-      const deadline = Date.now() + 10000;
-      while (Date.now() < deadline) {
-        try { page = await info(tab.id); } catch { /* 새 탭의 콘텐츠 스크립트 로드를 기다린다. */ }
-        if (page?.conversation === record.conversation && page.ready) break;
-        await wait(250);
+      let page = await waitReady(tab.id, record.conversation);
+      const deliver = async background => {
+        record.targetDocument = page.documentKey;
+        await freshAttempt(record);
+        record.status = 'ready'; record.created = Date.now();
+        await put(attemptKey(id), record);
+        return chrome.tabs.sendMessage(tab.id, { type: 'feedback:deliver', attempt: id, background,
+          conversation: record.conversation, documentKey: page.documentKey, prompt: F.prompt(a) }, { frameId: 0 });
+      };
+      let result = await deliver(true);
+      if (result?.status === 'blocked' && result.retry && !tab.active) {
+        // 뒤에 있는 탭에서 입력이 반영되지 않았다(넣은 글은 지웠다). 잠깐 앞으로 가져와 넣고 곧바로 자소설로 돌아온다.
+        flashed = true;
+        await activate(tab.id);
+        page = await waitReady(tab.id, record.conversation);
+        result = await deliver(false);
       }
-      if (page?.conversation !== record.conversation || !page.ready) throw Error('GPT 입력창을 준비하지 못했습니다. 로그인과 페이지 로딩을 확인해 주세요.');
-      record.targetDocument = page.documentKey;
-      await freshAttempt(record);
-      record.status = 'ready';
-      await put(attemptKey(id), record);
-      const result = await chrome.tabs.sendMessage(tab.id, { type: 'feedback:deliver', attempt: id,
-        conversation: record.conversation, documentKey: page.documentKey, prompt: F.prompt(d) }, { frameId: 0 });
       if (!['sent', 'blocked', 'unknown'].includes(result?.status)) throw Error('GPT 전송 응답을 확인하지 못했습니다.');
       record.status = result.status;
       // client의 blocked는 클릭하지 않았다는 확정 응답이다. 채널 실패는 아래 catch에서 별도로 처리한다.
@@ -158,20 +178,22 @@
         record.sentAt = Date.now();
         if (!record.userMessage) { record.status = 'unknown'; record.error = '보낸 메시지를 찾지 못해 답을 기다릴 수 없습니다. GPT 대화에서 확인해 주세요.'; }
       }
-      delete record.draft; // 답변 원문은 남기지 않는다. 판독에 필요한 인용만 request에 있다.
+      delete record.ask; // 답변 원문은 남기지 않는다. 판독과 되돌리기에 필요한 고른 곳·질문만 request에 있다.
       await put(attemptKey(id), record);
-      // 보낸 뒤에는 GPT 탭에 머문다. ChatGPT는 뒤로 간 탭에서 답을 끝까지 그리지 않을 수 있어(2026-09-15 실사이트),
-      // 답이 끝나면 GPT 탭의 "자소설에서 받기"로 돌아온다.
+      if (record.status !== 'blocked') await occupy(sender.tab.id, id);
       return { status: record.status, error: record.error };
     } catch (e) {
       const latest = await get(attemptKey(id));
       record.status = latest?.status === 'committing' ? 'unknown' : 'blocked';
       record.error = e.message;
-      delete record.draft;
+      delete record.ask;
       await put(attemptKey(id), record);
-      if (sourceWindow != null) await activate(sender.tab.id).catch(() => {});
+      if (record.status !== 'blocked') await occupy(sender.tab.id, id);
       return { status: record.status, error: e.message };
-    } finally { locks.delete(lock); locks.delete(resumeLock); }
+    } finally {
+      if (flashed) await activate(sender.tab.id).catch(() => {});
+      locks.delete(lock); locks.delete(resumeLock);
+    }
   }
   function cleanBlocks(blocks) {
     if (!Array.isArray(blocks) || blocks.length > 400) throw Error('GPT 답 형식을 읽지 못했습니다.');
@@ -191,24 +213,32 @@
       throw Object.assign(Error('기다리는 요청이 아닙니다.'), { gone: true });
     if (record.reply) return { done: true };
     const blocks = cleanBlocks(message.blocks);
-    const parsed = F.parseReply(blocks, record.request.quotes);
     record.targetTab = sender.tab.id;
     if (message.phase === 'complete') {
-      record.reply = { items: parsed.items, completedAt: Date.now() };
-      record.progress = { seen: parsed.seen, streaming: false };
+      record.reply = { item: F.parseAnswer(blocks, record.request.quote.text), completedAt: Date.now() };
+      record.progress = { streaming: false };
       record.lost = false;
       await put(attemptKey(message.attempt), record);
       await notify(record, message.attempt);
       return { done: true };
     }
-    const seen = parsed.seen.join(',');
-    if (record.lost || !record.progress?.streaming || (record.progress.seen || []).join(',') !== seen) {
-      record.progress = { seen: parsed.seen, streaming: true };
+    if (record.lost || !record.progress?.streaming) {
+      record.progress = { streaming: true };
       record.lost = false;
       await put(attemptKey(message.attempt), record);
       await notify(record, message.attempt);
     }
     return { done: false };
+  }
+  function cleanReview(review, record) {
+    if (review == null) return null;
+    const text = v => typeof v === 'string' && v.length <= F.LIMIT.replacement;
+    if (review.state === 'stale') return { state: 'stale' };
+    if (review.state === 'applied' && Number.isInteger(review.at) && review.at >= 0 && text(review.replacement) && text(review.original) &&
+        review.original === record.request?.quote.text && review.replacement === record.reply?.item?.replacement) {
+      return { state: 'applied', at: review.at, replacement: review.replacement, original: review.original };
+    }
+    throw Error('받은 결과를 기록하지 못했습니다.');
   }
   async function handle(message, sender) {
     if (sender.id !== chrome.runtime.id || sender.frameId !== 0 || !sender.tab) throw Error('지원하지 않는 요청입니다.');
@@ -232,16 +262,6 @@
       return {};
     }
     if (message.type === 'feedback:reply') return reply(message, sender);
-    if (message.type === 'feedback:return') {
-      if (origin(sender) !== 'https://chatgpt.com' || !validId(message.attempt)) throw Error('요청을 확인하지 못했습니다.');
-      const record = await get(attemptKey(message.attempt));
-      if (!record || record.conversation !== JSLGpt.conversation(sender.tab.url || sender.url)) throw Error('이 대화에서 보낸 요청이 아닙니다.');
-      try { await activate(record.sourceTab); }
-      catch { throw Error('보낸 자소설 탭이 닫혔습니다. 지원서를 다시 열어 주세요.'); }
-      await chrome.tabs.sendMessage(record.sourceTab, { type: 'feedback:open', attempt: message.attempt,
-        questionId: record.request?.questionId, number: record.request?.number }, { frameId: 0 }).catch(() => {});
-      return { returned: true };
-    }
     if (message.type === 'feedback:watch') {
       if (origin(sender) !== 'https://chatgpt.com') throw Error('GPT 대화가 아닙니다.');
       const conversation = JSLGpt.conversation(sender.tab.url || sender.url), all = await session.get(null), waiting = [];
@@ -258,22 +278,22 @@
     }
     const data = await sourceState(sender);
     if (message.type === 'feedback:load') {
-      const fresh = F.create(data.state), k = draftKey(sender.tab.id, fresh);
-      const saved = (await get(k))?.draft;
-      const draft = saved?.version === 2 ? saved : fresh;
-      const id = draft.attempt?.id, record = validId(id) ? await get(attemptKey(id)) : null;
-      return { draft, attempt: record && record.sourceTab === sender.tab.id ? summary(id, record) : null, ...await choices(data.state) };
-    }
-    if (message.type === 'feedback:save') {
-      const d = F.validate(message.draft);
-      if (d.resumeId !== String(data.state.resume.id)) throw Error('지원서가 변경되었습니다.');
-      await put(draftKey(sender.tab.id, d), { draft: d, updated: Date.now() });
-      return {};
+      const id = await get(slotKey(sender.tab.id)), record = validId(id) ? await get(attemptKey(id)) : null;
+      const mine = record && record.sourceTab === sender.tab.id && record.request?.resumeId === String(data.state.resume.id);
+      return { attempt: mine ? summary(id, record) : null, ...await choices(data.state) };
     }
     if (message.type === 'feedback:targets') return choices(data.state);
     if (message.type === 'feedback:select') return select(message, sender, data);
     if (message.type === 'feedback:send') return send(message, sender, data);
     if (message.type === 'feedback:claim') return claim(message, sender);
+    if (message.type === 'feedback:review') {
+      if (!validId(message.attempt)) throw Error('요청 기록을 찾지 못했습니다.');
+      const record = await get(attemptKey(message.attempt));
+      if (!record || record.sourceTab !== sender.tab.id || !record.reply) throw Error('요청 기록을 찾지 못했습니다.');
+      record.review = cleanReview(message.review, record);
+      await put(attemptKey(message.attempt), record);
+      return {};
+    }
     if (message.type === 'feedback:focus') {
       let conversation = message.conversation;
       if (validId(message.attempt)) {
@@ -293,12 +313,13 @@
       const record = await get(attemptKey(message.attempt));
       if (record && record.sourceTab !== sender.tab.id) throw Error('다른 탭의 요청입니다.');
       if (record) await session.remove(attemptKey(message.attempt));
+      if (await get(slotKey(sender.tab.id)) === message.attempt) await session.remove(slotKey(sender.tab.id));
       return {};
     }
     throw Error('알 수 없는 질문 요청입니다.');
   }
   chrome.runtime.onMessage.addListener((message, sender, reply) => {
-    if (!message?.type?.startsWith(prefix) || ['feedback:deliver', 'feedback:page-info', 'feedback:changed', 'feedback:locate', 'feedback:start-watch', 'feedback:open'].includes(message.type)) return;
+    if (!message?.type?.startsWith(prefix) || ['feedback:deliver', 'feedback:page-info', 'feedback:changed', 'feedback:locate', 'feedback:start-watch'].includes(message.type)) return;
     // 같은 요청의 동시 전송/승인 경쟁을 직렬화한다.
     const operation = message.type + ':' + (message.attempt || sender.tab?.id);
     if (operations.has(operation)) { reply({ ok: false, busy: true, error: '같은 요청을 처리 중입니다.' }); return; }
@@ -308,11 +329,11 @@
       .then(data => reply({ ok: true, ...data }), e => reply({ ok: false, error: e.message, ...(e.gone ? { gone: true } : {}) }));
     return true;
   });
-  // 세션 보관: 자소설 탭이 닫히면 인용·요청·답을 정리한다. GPT 탭이 닫히면 기다리는 요청에 표시한다.
+  // 세션 보관: 자소설 탭이 닫히면 질문·답을 정리한다. GPT 탭이 닫히면 기다리는 요청에 표시한다.
   chrome.tabs.onRemoved.addListener(async tabId => {
     const all = await session.get(null), remove = [];
     for (const [k, record] of Object.entries(all)) {
-      if (k.startsWith(prefix + 'draft:' + tabId + ':') || (k.startsWith(prefix + 'attempt:') && record.sourceTab === tabId)) { remove.push(k); continue; }
+      if (k === slotKey(tabId) || (k.startsWith(prefix + 'attempt:') && record.sourceTab === tabId)) { remove.push(k); continue; }
       if (k.startsWith(prefix + 'attempt:') && record.targetTab === tabId && record.status === 'sent' && !record.reply && !record.lost) {
         record.lost = true;
         await put(k, record);

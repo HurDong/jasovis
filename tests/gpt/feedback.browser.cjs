@@ -1,5 +1,5 @@
-// 가상 자소설 + 가상 GPT 두 출처에서 실제 MV3 콘텐츠 스크립트/워커로 인용 질문 → 답 → 받기 흐름을 검증한다.
-// 실제 사용자 대화로 전송하지 않는다. JSL_FEEDBACK_SHOTS=<폴더>를 주면 단계별 대시보드 화면을 저장한다.
+// 가상 자소설 + 가상 GPT 두 출처에서 실제 MV3 콘텐츠 스크립트/워커로 고르기 → 질문 바 → 답 → 바꾸기 흐름을 검증한다.
+// 실제 사용자 대화로 전송하지 않는다. JSL_FEEDBACK_SHOTS=<폴더>를 주면 단계별 화면을 저장한다.
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
@@ -20,8 +20,8 @@ const source = base.resume(55, false, [
   const baseSwitch=model.switch_qna.bind(model);model.switch_qna=n=>{baseSwitch(n);rendered=ta.value;};
   model.switch_qna(1);ta.addEventListener('input',e=>{if(e.target.value!==rendered){rendered=e.target.value;model.qnas[model.currentQnaIndex].answer=e.target.value;}});
   </script></body>`);
-// 가상 GPT: 보낸 요청의 인용을 읽어 정해진 형식으로 스트리밍 답을 만든다. localStorage로 새로고침 뒤 대화를 복원한다.
-const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</title><style>body{font:14px/1.5 sans-serif;max-width:680px;margin:40px auto}.whitespace-pre-wrap{white-space:pre-wrap}#prompt-textarea{border:1px solid #aaa;padding:12px;min-height:70px;white-space:pre-wrap}</style></head><body>
+// 가상 GPT: 보낸 질문의 고칠 부분을 읽어 정해진 형식으로 스트리밍 답을 만든다. localStorage로 새로고침 뒤 대화를 복원한다.
+const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</title><style>body{font:14px/1.5 sans-serif;max-width:680px;margin:40px auto}#prompt-textarea{border:1px solid #aaa;padding:12px;min-height:70px;white-space:pre-wrap}</style></head><body>
   <div id="messages"></div><form data-type="unified-composer"><div id="prompt-textarea" class="ProseMirror" contenteditable="true" role="textbox"><p><br></p></div>
   <button type="submit" data-testid="send-button" disabled>전송</button></form><script>
   window.sends=0;window.echo=true;window.mode=localStorage.getItem('fixture-mode')||'normal';window.delay=900;
@@ -33,18 +33,16 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
   if(saved){box.innerHTML=saved;box.querySelectorAll('[data-is-streaming="true"]').forEach(finish);}
   editor.addEventListener('input',()=>{button.disabled=!editor.innerText.trim();});
   function respond(prompt){
-    const quotes=[...prompt.matchAll(/\\[인용 (\\d+) · ([^\\]]+)\\]\\s*\\n+원문: ([^\\n]*)/g)].map(m=>({id:m[1],kind:m[2],text:m[3]}));
-    if(!quotes.length)return;
+    const quote=(/고칠 부분: ([^\\n]*)/.exec(prompt)||[])[1],question=(/질문: ([^\\n]*)/.exec(prompt)||[])[1]||'';
+    if(quote==null)return;
     const sec=document.createElement('section');sec.dataset.testid='conversation-turn-'+Date.now();
     const art=document.createElement('article');const msg=document.createElement('div');msg.dataset.messageAuthorRole='assistant';msg.dataset.isStreaming='true';
     const md=document.createElement('div');md.className='markdown';msg.append(md);sec.append(msg);art.append(sec);box.append(art);
-    let html='<p>요청하신 곳을 봤습니다.</p>';
-    for(const q of quotes){
-      if(window.mode==='broken'&&q.id===quotes[0].id){html+='<p>첫 인용은 좋아 보여서 따로 고치지 않았습니다.</p>';continue;}
-      if(q.kind==='질문')html+='<h3>인용 '+q.id+'</h3><p>진단: 판단할 근거가 부족합니다.</p><p>확인 필요: 어떤 상황이었는지 알려 주세요.</p>';
-      else html+='<h3>인용 '+q.id+'</h3><p><strong>진단:</strong> 가상 진단 '+q.id+'</p><p>수정안:</p><pre><div>plaintext</div><code>[수정 '+q.id+'] '+esc(q.text)+'</code></pre><p>확인 필요: 없음</p>';
-    }
-    md.innerHTML=html.split('<h3>').slice(0,2).join('<h3>');persist();
+    let html;
+    if(window.mode==='broken')html='<p>좋아 보여서 따로 고치지 않았습니다.</p>';
+    else if(question.includes('질문만'))html='<p><strong>진단:</strong> 반복이 강조로 읽혀서 어색하지 않아요.</p><p>확인 필요: 없음</p>';
+    else html='<p><strong>진단:</strong> 가상 진단입니다.</p><p>수정안:</p><pre><div>plaintext</div><code>[수정] '+esc(quote)+'</code></pre><p>확인 필요: 없음</p>';
+    md.innerHTML='<p><strong>진단:</strong> 쓰는 중</p>';persist();
     setTimeout(()=>{md.innerHTML=html;persist();finish(msg);},400);
   }
   document.querySelector('form').onsubmit=e=>{e.preventDefault();window.sends++;window.lastPrompt=editor.innerText;
@@ -67,239 +65,270 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
     let gpt = await context.newPage();
     target.on('pageerror', e => errors.push('target: ' + e.message)); gpt.on('pageerror', e => errors.push('gpt: ' + e.message));
     await target.goto('https://jasoseol.com/resume/55'); await gpt.goto('https://chatgpt.com/g/project/c/feedback-fixture');
-    const dash = target.locator('#jsl-dashboard'), view = dash.locator('.gq'), primary = dash.locator('.gq-actions .jsl-action-btn.primary');
-    const card = id => view.locator('[data-quote-id="' + id + '"]');
-    const answer = () => target.locator('textarea.answer').inputValue();
-    const shot = async name => { if (shots) await dash.locator('.wrap').screenshot({ path: path.join(shots, name + '.png') }); };
+    await target.bringToFront();
+    const bar = target.locator('#jsl-gpt-feedback .float');
+    const offer = bar.locator('.offer'), compose = bar.locator('.compose'), input = compose.locator('textarea');
+    const card = bar.locator('.card'), pill = bar.locator('.pill');
+    const ta = target.locator('textarea.answer');
+    const answer = () => ta.inputValue();
+    const shot = async name => { if (shots) await target.screenshot({ path: path.join(shots, name + '.png') }); };
+    // 마우스로 고른 것처럼: 누르고, 범위를 잡고, 뗀다.
     const select = async (text, nth = 0) => {
-      await target.locator('textarea.answer').evaluate((ta, [part, index]) => {
-        let at = -1; for (let i = 0; i <= index; i++) at = ta.value.indexOf(part, at + 1);
-        ta.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); ta.focus(); ta.setSelectionRange(at, at + part.length);
-        ta.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 520, clientY: 120 }));
+      await ta.evaluate((el, [part, index]) => {
+        let at = -1; for (let i = 0; i <= index; i++) at = el.value.indexOf(part, at + 1);
+        el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); el.focus(); el.setSelectionRange(at, at + part.length);
+        document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
       }, [text, nth]);
     };
-    const add = async (text, kind, nth = 0) => {
+    // 고른 글자의 화면 위치(답변란과 같은 글꼴로 복제해 잰다).
+    const lineRects = (text, nth = 0) => ta.evaluate((el, [part, index]) => {
+      let at = -1; for (let i = 0; i <= index; i++) at = el.value.indexOf(part, at + 1);
+      const cs = getComputedStyle(el), r = el.getBoundingClientRect(), d = document.createElement('div');
+      for (const p of ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'wordSpacing', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+        'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderTopStyle', 'borderRightStyle', 'borderBottomStyle', 'borderLeftStyle', 'boxSizing']) d.style[p] = cs[p];
+      Object.assign(d.style, { position: 'fixed', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', visibility: 'hidden' });
+      const s = document.createElement('span'); s.textContent = el.value.slice(at, at + part.length);
+      d.append(el.value.slice(0, at), s, el.value.slice(at + part.length)); document.body.append(d);
+      const out = [...s.getClientRects()].map(x => ({ left: x.left, right: x.right, top: x.top, bottom: x.bottom })); d.remove(); return out;
+    }, [text, nth]);
+    const overlaps = (a, b) => a.x < b.right - 1 && a.x + a.width > b.left + 1 && a.y < b.bottom - 1 && a.y + a.height > b.top + 1;
+    const assertClear = async (text, nth, label) => {
+      const box = await bar.boundingBox(), lines = await lineRects(text, nth);
+      const dash = await target.locator('#jsl-dashboard .wrap').boundingBox();
+      assert.ok(box, label + ': 질문 바가 보인다');
+      for (const line of lines) assert.equal(overlaps(box, line), false, label + ': 고른 줄을 가리지 않는다');
+      assert.equal(overlaps(box, { left: dash.x, right: dash.x + dash.width, top: dash.y, bottom: dash.y + dash.height }), false, label + ': 대시보드를 가리지 않는다');
+      return box;
+    };
+    const ask = async (text, question, nth = 0) => {
       await select(text, nth);
-      await target.locator('#jsl-gpt-feedback .bubble').waitFor({ state: 'visible' });
-      await target.locator('#jsl-gpt-feedback button[data-kind="' + kind + '"]').click();
-      await target.locator('#jsl-gpt-feedback .bubble').waitFor({ state: 'hidden' });
+      await offer.waitFor();
+      await ta.press('Alt+q');
+      await input.waitFor();
+      await input.fill(question);
+      await input.press('Enter');
     };
 
-    // 1. 드래그 → 버블 → 대시보드 화면에 담기
-    await add('JobFit 프로젝트를', 'context');
-    await view.waitFor({ state: 'visible' });
-    assert.equal(await dash.locator('.view-title').innerText(), 'GPT 질문');
-    assert.match(await dash.locator('.view-meta').innerText(), /1번 문항/);
-    assert.match(await card(1).innerText(), /JobFit 프로젝트를[\s\S]*빠진 맥락/);
-    await add('데이터 처리에 대한 깊은 이해를 함양할 수 있었습니다', 'tone');
-    await add('같은 단어', 'ask', 1);
-    await add('JobFit 프로젝트를', 'tone'); // 같은 범위는 종류만 바꾼다
-    assert.equal(await view.locator('.gq-card').count(), 3);
-    assert.match(await card(1).innerText(), /AI 티/);
-    await card(1).locator('.gq-kind').click(); assert.match(await card(1).innerText(), /질문/);
-    await card(1).locator('.gq-kind').click(); assert.match(await card(1).innerText(), /빠진 맥락/);
-    assert.equal(await primary.innerText(), '질문 내용을 적어 주세요'); assert.equal(await primary.isDisabled(), true);
-    await card(3).locator('.gq-memo').fill('이 단어가 반복돼서 어색한지 봐줘');
-    assert.equal(await primary.innerText(), '보낼 GPT 대화를 골라 주세요');
-    await card(1).locator('.gq-memo').fill('동아리 이름은 가상 동아리');
-    await card(1).locator('.gq-memo').press('Control+s'); await card(1).locator('.gq-memo').press('Alt+2');
+    // 1. 마우스·키보드로 고르면 우클릭 없이 질문 바가 뜬다. 고른 줄과 대시보드를 가리지 않는다.
+    assert.equal(await target.locator('#jsl-dashboard').getByRole('button', { name: /GPT 질문/ }).count(), 0, '대시보드 맨 아래 GPT 질문 버튼은 없다');
+    await select('JobFit 프로젝트를');
+    await offer.waitFor();
+    assert.match(await offer.innerText(), /이 부분 GPT에게 질문[\s\S]*Alt\+Q/);
+    await assertClear('JobFit 프로젝트를', 0, '제안 바');
+    await ta.evaluate(el => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); });
+    await offer.waitFor({ state: 'hidden' });
+    await ta.evaluate(el => { const at = el.value.indexOf('마지막'); el.setSelectionRange(at, at); });
+    await ta.press('Shift+ArrowRight'); await ta.press('Shift+ArrowRight'); await ta.press('Shift+ArrowRight');
+    await offer.waitFor();
+    await target.mouse.click(1100, 700); // 답변란 밖을 누르면 닫힌다
+    await offer.waitFor({ state: 'hidden' });
+    await shot('1-offer');
+    console.log('PASS: mouse and keyboard selection show the question bar without right-click, clear of the selection and dashboard, closes on outside click');
+
+    // 2. Alt+Q → 질문 칸에 바로 커서. 사이트 단축키·저장이 새지 않고, 대화 고르기·막힌 전송은 글을 지킨다.
+    await select('JobFit 프로젝트를');
+    await offer.waitFor();
+    await ta.press('Alt+q');
+    await input.waitFor();
+    assert.equal(await target.evaluate(() => document.activeElement?.id), 'jsl-gpt-feedback', '커서가 질문 칸에 있다');
+    assert.match(await compose.locator('.quote').innerText(), /JobFit 프로젝트를/);
+    assert.equal(await target.locator('#jsl-gpt-feedback-marks .p').count(), 1, '질문 칸에 쓰는 동안 고른 곳을 칠해 둔다');
+    await assertClear('JobFit 프로젝트를', 0, '질문 칸');
+    await input.pressSequentially('어디서 한 건지 빠진 것 같아');
+    await input.press('Control+s'); await input.press('Alt+2');
     assert.equal(await target.evaluate(() => saves), 0); assert.equal(await target.evaluate(() => model.currentQnaIndex), 0);
-    const marks = await target.locator('#jsl-gpt-feedback-marks .q').count();
-    assert.equal(marks, 3, '답변란에 담은 인용 3곳을 표시한다');
-    await shot('1-collect');
-    console.log('PASS: bubble kinds, same-range kind change, kind chip cycle, memo isolation, send blockers, quote marks');
-
-    // 2. 담은 뒤 편집: 유일한 원문은 따라가고, 사라진 인용만 경고한다
-    await target.locator('textarea.answer').fill('앞에 새 문장을 넣었습니다. ' + sourceAnswer.replace('깊은 이해를 함양할 수 있었습니다', '많이 배웠습니다'));
-    await card(2).locator('.gq-note.warn').waitFor();
-    assert.equal(await primary.innerText(), '원문이 바뀐 인용을 빼 주세요');
-    await card(2).locator('.gq-x').click();
-    await target.locator('textarea.answer').fill(sourceAnswer);
-    await add('데이터 처리에 대한 깊은 이해를 함양할 수 있었습니다', 'tone');
-    assert.deepEqual(await view.locator('.gq-card').evaluateAll(cards => cards.map(c => c.dataset.quoteId)), ['1', '3', '4']);
-    console.log('PASS: rebase after edits, lost quote warning and removal, stable ids');
-
-    // 3. 대화 고르기 → 막힌 전송(작성 중인 GPT 입력) → 보내기
-    await view.getByRole('button', { name: /보낼 GPT 대화 고르기/ }).click();
-    await view.locator('.gq-opt', { hasText: '가상 자기소개서 대화' }).click();
-    await view.locator('.gq-target', { hasText: '가상 자기소개서 대화' }).waitFor();
-    assert.equal(await primary.innerText(), 'GPT로 보내기 · 3');
+    await input.press('Enter');
+    await compose.locator('.note', { hasText: '보낼 GPT 대화를 골라 주세요' }).waitFor();
+    await compose.locator('.opt', { hasText: '가상 자기소개서 대화' }).click();
+    await compose.locator('.target', { hasText: '가상 자기소개서 대화' }).waitFor();
     await gpt.locator('#prompt-textarea').fill('사용자가 입력 중인 초안');
-    await primary.click();
-    await view.locator('.gq-status', { hasText: '보내지 못했어요' }).waitFor();
-    assert.match(await view.locator('.gq-status').innerText(), /작성 중인 내용/);
-    assert.equal(await gpt.evaluate(() => sends), 0); assert.equal(await view.locator('.gq-memo').count(), 3);
+    await input.press('Enter');
+    await compose.locator('.note', { hasText: '작성 중인 내용' }).waitFor();
+    assert.equal(await gpt.evaluate(() => sends), 0);
+    assert.equal(await input.inputValue(), '어디서 한 건지 빠진 것 같아');
     await gpt.locator('#prompt-textarea').fill('');
-    await view.locator('.gq-status .gq-link', { hasText: '닫기' }).click();
-    await primary.click();
-    await view.locator('.gq-status', { hasText: 'GPT가 답하는 중' }).waitFor();
-    await shot('2-waiting');
+    await shot('2-compose');
+    await input.press('Enter');
+    await pill.filter({ hasText: 'GPT가' }).waitFor();
     assert.equal(await gpt.evaluate(() => sends), 1);
     const prompt = await gpt.evaluate(() => lastPrompt);
-    assert.ok(prompt.startsWith('[자비스 요청]'));
-    assert.match(prompt, /\[인용 1 · 빠진 맥락\]/); assert.match(prompt, /\[인용 3 · 질문\][\s\S]*이 단어가 반복돼서/); assert.match(prompt, /\[인용 4 · AI 티\]/);
+    assert.ok(prompt.startsWith('[자비스 요청] 자소설닷컴 1번 문항 답변에 대한 질문입니다.'));
+    assert.match(prompt, /고칠 부분: JobFit 프로젝트를\n+주변 문맥: [^\n]+\n+질문: 어디서 한 건지 빠진 것 같아/);
     assert.doesNotMatch(prompt, /다른 문항의 비공개|\b91\b/);
-    assert.equal(await primary.isDisabled(), true);
-    console.log('PASS: conversation pick, blocked send keeps draft, format-enforced prompt, waiting state');
+    assert.equal(await target.evaluate(() => document.activeElement === document.querySelector('textarea.answer')), true, '보낸 뒤 쓰던 답변란으로 돌아온다');
+    assert.equal(await target.locator('#jsl-gpt-feedback-marks .q').count(), 1, '질문한 곳에 밑줄을 남긴다');
+    await shot('3-waiting');
+    console.log('PASS: Alt+Q focuses the question box, keys isolated, target pick, blocked send keeps the text, prompt, waiting pill and caret return');
 
-    // 4. 답 도착 → 제안 카드 · 기존 적용 패널 미부착
-    await view.locator('.gq-sum').waitFor();
-    assert.match(await view.locator('.gq-sum').innerText(), /수정안 2 · 확인 필요 1/);
-    assert.match(await card(1).innerText(), /JobFit 프로젝트를[\s\S]*→[\s\S]*\[수정 1\] JobFit 프로젝트를[\s\S]*가상 진단 1/);
-    assert.match(await card(3).innerText(), /확인 필요[\s\S]*어떤 상황이었는지/);
-    assert.equal(await gpt.locator('[data-jsl-gpt]').count(), 0, '인용 질문의 답에는 문항 전체 적용 패널을 붙이지 않는다');
-    const returnBtn = gpt.locator('[data-jsl-feedback] button', { hasText: '자소설에서 받기' });
-    await returnBtn.waitFor();
-    await dash.locator('.view-back').click(); await view.waitFor({ state: 'hidden' });
-    await returnBtn.click();
-    await view.locator('.gq-sum').waitFor();
-    assert.equal(await primary.innerText(), '남은 2개 모두 받기');
-    await shot('3-review');
-    console.log('PASS: streamed reply parsed per quote, ask card, no full-answer apply panel on feedback reply');
-
-    // 5. 받기 → 되돌리기 → 모두 받기 (중복 원문 위치 보정 포함)
-    await card(1).getByRole('button', { name: '인용 1 받기' }).click();
-    await card(1).locator('.gq-done, .st.done').first().waitFor();
-    const once = sourceAnswer.replace('JobFit 프로젝트를', '[수정 1] JobFit 프로젝트를');
+    // 3. 답 도착 → 같은 자리에 수정안 → 접기·펼치기 → 바꾸기 → 되돌리기 → 다시 바꾸기
+    await card.waitFor();
+    assert.match(await card.innerText(), /수정안[\s\S]*\+5자[\s\S]*내 질문 · 어디서 한 건지[\s\S]*가상 진단입니다[\s\S]*JobFit 프로젝트를[\s\S]*\[수정\] JobFit 프로젝트를/);
+    assert.equal(await gpt.locator('[data-jsl-gpt]').count(), 0, '질문의 답에는 문항 전체 적용 패널을 붙이지 않는다');
+    await assertClear('JobFit 프로젝트를', 0, '수정안');
+    await shot('4-result');
+    await ta.press('Alt+q');
+    await target.waitForFunction(() => document.activeElement?.id === 'jsl-gpt-feedback');
+    await target.keyboard.press('Escape');
+    await pill.filter({ hasText: '수정안 도착' }).waitFor();
+    await pill.getByRole('button', { name: '보기' }).click();
+    await card.getByRole('button', { name: '바꾸기 ↵' }).click();
+    await pill.filter({ hasText: '바꿨어요' }).waitFor();
+    const once = sourceAnswer.replace('JobFit 프로젝트를', '[수정] JobFit 프로젝트를');
     assert.equal(await answer(), once); assert.equal(await target.evaluate(() => model.qnas[0].answer), once);
     const mirror = await target.evaluate(() => document.querySelector('#jsl-checkpoint')?.shadowRoot?.querySelector('.layer')?.textContent ?? null);
-    assert.equal(mirror.replace(/ $/, ''), once, '검수 마커 복제 층도 받은 글로 다시 그린다');
+    assert.equal(mirror.replace(/ $/, ''), once, '검수 마커 복제 층도 바꾼 글로 다시 그린다');
     await target.locator('#jsl-gpt-feedback-marks .a').waitFor({ state: 'attached' });
-    await card(1).getByRole('button', { name: '인용 1 되돌리기' }).click();
-    await card(1).getByRole('button', { name: '인용 1 받기' }).waitFor();
+    await pill.getByRole('button', { name: '되돌리기' }).click();
+    await card.waitFor();
     assert.equal(await answer(), sourceAnswer);
-    await primary.click();
-    await dash.locator('.gq-actions .jsl-action-btn.primary', { hasText: '새 질문' }).waitFor();
-    const all = sourceAnswer.replace('JobFit 프로젝트를', '[수정 1] JobFit 프로젝트를')
-      .replace('데이터 처리에 대한 깊은 이해를 함양할 수 있었습니다', '[수정 4] 데이터 처리에 대한 깊은 이해를 함양할 수 있었습니다');
-    assert.equal(await answer(), all);
-    assert.equal(await target.locator('#jsl-gpt-feedback-marks .a').count(), 2);
+    await card.focus();
+    await target.keyboard.press('Enter');
+    await pill.filter({ hasText: '바꿨어요' }).waitFor();
+    assert.equal(await answer(), once);
+    await bar.waitFor({ state: 'hidden', timeout: 12000 }); // 잠시 뒤 스스로 닫힌다
     assert.equal(await target.evaluate(() => saves), 0);
-    await shot('4-applied');
-    console.log('PASS: apply one, undo, apply all with shifted positions, applied marks, no save');
+    console.log('PASS: result card in place, collapse/expand, apply, undo, Enter applies, auto close, no save');
 
-    // 6. 새로고침 복원
+    // 4. 답만 있는 질문 → 새로고침해도 남아 있고 닫으면 끝난다
+    await ta.fill(sourceAnswer);
+    await ask('같은 단어', '반복이 어색한지 질문만', 1);
+    await card.filter({ hasText: 'GPT 답' }).waitFor();
+    assert.match(await card.innerText(), /어색하지 않아요/);
+    assert.equal(await card.getByRole('button', { name: /바꾸기/ }).count(), 0);
     await target.reload();
-    await dash.getByRole('button', { name: /GPT 질문/ }).click();
-    await view.locator('.gq-sum').waitFor();
-    assert.match(await view.locator('.gq-sum').innerText(), /받음 2/);
-    assert.equal(await view.locator('.gq-done').count(), 2);
-    console.log('PASS: reload restores reply and decisions');
+    await card.filter({ hasText: 'GPT 답' }).waitFor();
+    await card.getByRole('button', { name: '닫기' }).click();
+    await bar.waitFor({ state: 'hidden' });
+    await target.reload();
+    await target.waitForTimeout(1500);
+    assert.equal(await bar.isVisible(), false, '닫은 질문은 새로고침 뒤에도 다시 뜨지 않는다');
+    console.log('PASS: answer-only reply, reload restores, closing ends the question');
 
-    // 7. 새 질문 → 형식 오류 인용 + 답 기다리는 사이 원문 편집
-    await gpt.evaluate(() => { localStorage.setItem('fixture-mode', 'broken'); window.mode = 'broken'; });
-    await primary.click();
-    await view.locator('.gq-empty').waitFor();
-    await target.locator('textarea.answer').fill(sourceAnswer);
-    await add('JobFit 프로젝트를', 'tone');
-    await add('마지막 문장입니다', 'tone');
-    await primary.click();
-    await view.locator('.gq-status', { hasText: 'GPT가 답하는 중' }).waitFor();
-    await target.locator('textarea.answer').fill(sourceAnswer.replace('마지막 문장입니다', '끝 문장입니다'));
-    await view.locator('.gq-sum').waitFor();
-    assert.match(await card(1).innerText(), /읽지 못함[\s\S]*GPT에서 보기/);
-    await card(2).getByRole('button', { name: '인용 2 받기' }).click();
-    await card(2).locator('.gq-note.warn', { hasText: '원문이 바뀌어' }).waitFor(); assert.match(await view.locator('.gq-sum').innerText(), /원문 바뀜 1 · 읽지 못함 1/);
+    // 5. 기다리는 사이 고른 곳을 고치면 바꾸지 않는다. 형식이 틀린 답은 읽지 못함으로 둔다.
+    await gpt.evaluate(() => { window.delay = 2500; });
+    await ask('마지막 문장입니다', '');
+    await pill.filter({ hasText: 'GPT가' }).waitFor();
+    await ta.fill(sourceAnswer.replace('마지막 문장입니다', '끝 문장입니다'));
+    await card.waitFor({ timeout: 20000 });
+    await card.getByRole('button', { name: '바꾸기 ↵' }).click();
+    await card.filter({ hasText: '원문이 바뀌어 넣지 못했어요' }).waitFor();
     assert.equal(await answer(), sourceAnswer.replace('마지막 문장입니다', '끝 문장입니다'));
+    await card.getByRole('button', { name: '닫기' }).click();
+    await gpt.evaluate(() => { localStorage.setItem('fixture-mode', 'broken'); window.mode = 'broken'; window.delay = 900; });
+    await ta.fill(sourceAnswer);
+    await ask('같은 단어', '');
+    await card.filter({ hasText: '답을 읽지 못했어요' }).waitFor({ timeout: 20000 });
+    await card.getByRole('button', { name: '닫기' }).click();
     await shot('5-exceptions');
-    console.log('PASS: broken format isolated per quote, stale source never overwritten');
+    console.log('PASS: stale source never overwritten, broken format shown as unreadable');
 
-    // 8. GPT 탭 닫힘 → 다시 열기 → 감시 재개
+    // 6. GPT가 답하는 중이면 겹친 질문은 막히고 앞 질문은 남는다. GPT 탭이 닫혀도 다시 열어 이어받는다. 새 질문은 앞 질문을 대신한다.
     await gpt.evaluate(() => { localStorage.setItem('fixture-mode', 'slow'); window.mode = 'slow'; });
-    await card(1).locator('.gq-link', { hasText: '닫기' }).click(); await card(2).locator('.gq-link', { hasText: '빼기' }).click();
-    await primary.click();
-    await target.locator('textarea.answer').fill(sourceAnswer);
-    await add('같은 단어', 'tone');
-    await primary.click();
-    await view.locator('.gq-status', { hasText: 'GPT가 답하는 중' }).waitFor();
+    await ask('JobFit 프로젝트를', '느린 질문');
+    await pill.filter({ hasText: 'GPT가' }).waitFor();
+    const sendsBeforeOverlap = await gpt.evaluate(() => sends);
+    await ask('같은 단어', '겹친 질문');
+    await compose.locator('.note', { hasText: 'GPT가 답변 중' }).waitFor({ timeout: 20000 });
+    assert.equal(await gpt.evaluate(() => sends), sendsBeforeOverlap, '답하는 중에는 겹친 질문을 보내지 않는다');
+    await input.press('Escape'); await ta.evaluate(el => el.setSelectionRange(0, 0)); await target.mouse.click(1100, 700);
+    await pill.filter({ hasText: 'GPT가' }).waitFor();
+    await gpt.waitForFunction(() => [...document.querySelectorAll('.markdown')].pop()?.querySelector('code')); // 가상 GPT가 답 본문을 다 쓴 뒤(완료 표시 전) 닫는다
     await gpt.close();
-    await view.locator('.gq-status', { hasText: '보낸 GPT 탭을 찾을 수 없어요' }).waitFor();
+    await pill.filter({ hasText: 'GPT 탭이 닫혔어요' }).waitFor();
     await shot('6-lost');
     const reopened = context.waitForEvent('page');
-    await view.locator('.gq-status .gq-link', { hasText: '다시 열기' }).click();
+    await pill.getByRole('button', { name: '다시 열기' }).click();
     gpt = await reopened;
     gpt.on('pageerror', e => errors.push('gpt: ' + e.message));
     await gpt.waitForURL('https://chatgpt.com/g/project/c/feedback-fixture', { waitUntil: 'commit' });
     await gpt.evaluate(() => localStorage.setItem('fixture-mode', 'normal')).catch(() => {});
     await gpt.goto(gpt.url());
-    await view.locator('.gq-sum').waitFor({ timeout: 25000 });
-    assert.match(await card(1).innerText(), /\[수정 1\] 같은 단어/);
-    console.log('PASS: closed GPT tab shown as lost, reopened tab resumes watching the same request');
+    await target.bringToFront();
+    await card.waitFor({ timeout: 25000 });
+    assert.match(await card.innerText(), /내 질문 · 느린 질문[\s\S]*\[수정\] JobFit 프로젝트를/);
+    await ask('마지막 문장입니다', '대신하는 질문');
+    await card.filter({ hasText: '대신하는 질문' }).waitFor({ timeout: 20000 });
+    await card.getByRole('button', { name: '버리기' }).click();
+    await bar.waitFor({ state: 'hidden' });
+    console.log('PASS: blocked overlapping question keeps the earlier one, closed GPT tab resumes, a new question replaces the old');
 
-    // 9. 전송 확인 불가 → 사용자가 고른 다시 보내기만 새 요청으로 보낸다
-    await dash.locator('.gq-actions .jsl-action-btn', { hasText: '모두 빼기' }).click();
-    await primary.filter({ hasText: '새 질문' }).click();
-    await view.locator('.gq-empty').waitFor();
+    // 7. 전송 확인 불가 → 자동으로 다시 보내지 않고, 다시 보내기는 질문 칸을 되살려 새 요청으로 보낸다
     await gpt.evaluate(() => { window.echo = false; });
-    await add('마지막 문장입니다', 'context');
-    await primary.click();
-    await view.locator('.gq-status', { hasText: '보냈는지 확인하지 못했어요' }).waitFor({ timeout: 25000 });
-    assert.equal(await gpt.evaluate(() => sends), 1);
-    await target.waitForTimeout(6000); // 확인 불가 요청은 자동으로 다시 보내지 않는다(주기 확인 한 번 이상)
-    assert.equal(await gpt.evaluate(() => sends), 1);
+    const sendsStart = await gpt.evaluate(() => sends);
+    await ask('JobFit 프로젝트를', '확인 불가 질문');
+    await card.filter({ hasText: '보냈는지 확인하지 못했어요' }).waitFor({ timeout: 25000 });
+    await target.waitForTimeout(6000);
+    assert.equal(await gpt.evaluate(() => sends), sendsStart + 1);
     await gpt.evaluate(() => { window.echo = true; });
-    await view.locator('.gq-status .gq-link', { hasText: '보내지 않았다면 다시 보내기' }).click();
-    await view.locator('.gq-sum').waitFor({ timeout: 25000 });
-    assert.equal(await gpt.evaluate(() => sends), 2);
-    console.log('PASS: unknown send is never retried automatically; explicit resend creates a new request');
+    await card.getByRole('button', { name: '다시 보내기' }).click();
+    await input.waitFor();
+    assert.equal(await input.inputValue(), '확인 불가 질문');
+    await input.press('Enter');
+    await card.filter({ hasText: '수정안' }).waitFor({ timeout: 25000 });
+    assert.equal(await gpt.evaluate(() => sends), sendsStart + 2);
+    await card.getByRole('button', { name: '버리기' }).click();
+    console.log('PASS: unknown send is never retried automatically; resend reopens the question box');
 
-    // 9-2. 확인 시간(8초)이 지난 뒤에야 메시지가 뜬 경우: 다시 보내지 않고 "보냈어요 · 답 가져오기"로 이어받는다
-    await dash.locator('.gq-actions .jsl-action-btn', { hasText: '모두 빼기' }).click();
-    await primary.filter({ hasText: '새 질문' }).click();
+    // 7-2. 확인 시간(8초)이 지난 뒤에야 메시지가 뜬 경우: 다시 보내지 않고 이어받는다
     await gpt.evaluate(() => { window.echoDelay = 9500; });
     const postedBefore = await gpt.evaluate(() => window.posted || 0);
-    await add('같은 단어', 'context');
-    await primary.click();
-    await view.locator('.gq-status', { hasText: '보냈는지 확인하지 못했어요' }).waitFor({ timeout: 25000 });
-    const claimBtn = view.locator('.gq-status .gq-link', { hasText: '보냈어요 · 답 가져오기' });
+    await ask('같은 단어', '늦게 뜬 질문');
+    await card.filter({ hasText: '보냈는지 확인하지 못했어요' }).waitFor({ timeout: 25000 });
     await gpt.waitForFunction(n => (window.posted || 0) > n, postedBefore, { timeout: 15000 });
     const sendsBefore = await gpt.evaluate(() => sends);
-    await claimBtn.click();
-    await view.locator('.gq-sum').waitFor({ timeout: 25000 });
-    assert.match(await card(1).innerText(), /\[수정 1\] 같은 단어/);
+    await card.getByRole('button', { name: '보냈어요 · 답 기다리기' }).click();
+    await card.filter({ hasText: '늦게 뜬 질문' }).waitFor({ timeout: 25000 });
     assert.equal(await gpt.evaluate(() => sends), sendsBefore, '이어받기는 다시 보내지 않는다');
     await gpt.evaluate(() => { window.echoDelay = 0; });
+    await card.getByRole('button', { name: '버리기' }).click();
     console.log('PASS: late-rendered sent message is claimed by headline without resending');
 
-    // 10. 다른 문항에 있을 때 답 도착 → 알림에서 그 문항으로
-    await dash.locator('.gq-actions .jsl-action-btn', { hasText: '모두 빼기' }).click();
-    await primary.filter({ hasText: '새 질문' }).click();
+    // 8. 다른 문항에 있으면 답변란 옆에 그 문항 상태를 붙이고, 가기로 돌아가면 수정안이 뜬다
     await gpt.evaluate(() => { window.delay = 3500; });
-    await add('같은 단어', 'tone');
-    await primary.click();
-    await view.locator('.gq-status', { hasText: 'GPT가 답하는 중' }).waitFor();
+    await ask('같은 단어', '다른 문항 이동');
+    await pill.filter({ hasText: 'GPT가' }).waitFor();
     await target.locator('#q2').click();
-    await dash.locator('.view-meta', { hasText: '2번 문항' }).waitFor();
-    const go = target.locator('#jsl-toasts .tact', { hasText: '1번 문항으로' });
-    await go.waitFor({ timeout: 25000 });
-    await go.click();
-    await dash.locator('.view-meta', { hasText: '1번 문항' }).waitFor();
-    await view.locator('.gq-sum').waitFor();
+    await pill.filter({ hasText: '1번 문항 질문' }).waitFor();
+    await pill.filter({ hasText: '답 도착' }).waitFor({ timeout: 25000 });
+    await pill.getByRole('button', { name: '가기' }).click();
+    await card.filter({ hasText: '다른 문항 이동' }).waitFor();
     assert.equal(await target.evaluate(() => model.currentQnaIndex), 0);
-    console.log('PASS: reply for another question notifies with a jump action and opens that question');
-
-    // 11. 실사이트처럼 모델에 서버 CRLF가 남고 입력칸 끝 줄바꿈이 모델에서 잘린 상태에서도 보내고 받는다
-    await dash.locator('.gq-actions .jsl-action-btn', { hasText: '모두 빼기' }).click();
-    await primary.filter({ hasText: '새 질문' }).click();
+    await card.getByRole('button', { name: '버리기' }).click();
     await gpt.evaluate(() => { window.delay = 900; });
+    console.log('PASS: another question shows a docked status with a jump back to the result');
+
+    // 9. 실사이트처럼 모델에 서버 CRLF가 남고 입력칸 끝 줄바꿈이 모델에서 잘린 상태에서도 보내고 바꾼다
     await target.evaluate(() => {
       const q = model.qnas[0]; q.answer = q.answer.replace(/\n/g, '\r\n').trim();
-      // 사이트가 그린 입력칸 값(LF, 끝 줄바꿈 유지)을 사이트도 알고 있는 상태로 둔다.
-      document.querySelector('textarea.answer').value = q.answer + '\n'; rendered = document.querySelector('textarea.answer').value; // eslint-disable-line no-undef
+      document.querySelector('textarea.answer').value = q.answer.replace(/\r\n/g, '\n') + '\n'; rendered = document.querySelector('textarea.answer').value; // eslint-disable-line no-undef
     });
-    assert.notEqual(await target.evaluate(() => model.qnas[0].answer), await answer());
-    await add('마지막 문장입니다', 'tone');
-    await primary.click();
-    await view.locator('.gq-sum').waitFor({ timeout: 25000 });
-    await card(1).getByRole('button', { name: '인용 1 받기' }).click();
-    await card(1).locator('.st.done').waitFor();
-    assert.equal(await answer(), sourceAnswer.replace('마지막 문장입니다', '[수정 1] 마지막 문장입니다') + '\n');
+    await ask('마지막 문장입니다', '');
+    await card.filter({ hasText: '수정안' }).waitFor({ timeout: 25000 });
+    await card.getByRole('button', { name: '바꾸기 ↵' }).click();
+    await pill.filter({ hasText: '바꿨어요' }).waitFor();
+    assert.equal(await answer(), sourceAnswer.replace('마지막 문장입니다', '[수정] 마지막 문장입니다') + '\n');
     console.log('PASS: CRLF model answer and trimmed ng-model value do not block send or apply');
 
-    // 12. 문항 이탈
+    // 10. 답변란 옆 자리가 넉넉하면 질문 칸은 글 위가 아니라 옆에 뜬다
+    await target.setViewportSize({ width: 1500, height: 860 });
+    await bar.waitFor({ state: 'hidden', timeout: 12000 });
+    await select('데이터 처리에 대한');
+    await offer.waitFor();
+    await ta.press('Alt+q');
+    await input.waitFor();
+    const box = await assertClear('데이터 처리에 대한', 0, '넓은 화면 질문 칸');
+    const taBox = await ta.boundingBox();
+    assert.ok(box.x >= taBox.x + taBox.width, '답변란 오른쪽에 둔다');
+    await input.press('Escape');
+    await offer.waitFor();
+    assert.equal(await ta.evaluate(el => el.value.slice(el.selectionStart, el.selectionEnd)), '데이터 처리에 대한', 'Esc는 고른 곳을 되살린다');
+    await shot('7-beside');
+    console.log('PASS: wide screen puts the question box beside the answer; Esc restores the selection');
+
+    // 11. 문항 이탈
     await target.evaluate(() => history.pushState({}, '', '/resume_list'));
-    await view.waitFor({ state: 'hidden' });
+    await bar.waitFor({ state: 'hidden' });
     assert.deepEqual(errors, []);
-    console.log('PASS: SPA exit closes view, no page errors');
+    console.log('PASS: SPA exit hides the bar, no page errors');
   } finally { await context.close(); fs.rmSync(profile, { recursive: true, force: true }); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

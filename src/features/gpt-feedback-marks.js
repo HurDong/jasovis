@@ -1,4 +1,4 @@
-// 답변란 위 표시 층 — 담은 인용(밑줄+번호)과 받은 수정안(연주황 배경)을 칠한다.
+// 답변란 위 표시 층 — 질문 칸에 쓰는 동안 고른 곳(연주황), 질문한 곳(밑줄), 바꾼 곳(연주황 배경)을 칠한다.
 // 글자는 투명하고 클릭은 통과한다. 답변란 글자 위치와 맞추려고 폰트·여백을 그대로 복제한다.
 (function () {
   'use strict';
@@ -19,8 +19,9 @@
       .layer{position:absolute;left:0;top:0;overflow:hidden;color:transparent;background:transparent;border-color:transparent;
         white-space:pre-wrap;overflow-wrap:break-word;word-wrap:break-word}
       .q{position:relative;box-shadow:inset 0 -2px 0 #ffb377;border-radius:1px}
-      .q::after{content:attr(data-n);position:absolute;right:-3px;top:-.72em;min-width:13px;padding:0 3px;border-radius:7px;
+      .q[data-n]::after{content:attr(data-n);position:absolute;right:-3px;top:-.72em;min-width:13px;padding:0 3px;border-radius:7px;
         background:#ff6a00;color:#fff;font:700 9px/13px -apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic",sans-serif;text-align:center}
+      .p{background:rgba(255,106,0,.18);border-radius:2px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
       .a{background:rgba(255,106,0,.12);box-shadow:inset 0 -2px 0 #ffc79c;border-radius:3px;
         box-decoration-break:clone;-webkit-box-decoration-break:clone}
     </style><div class="layer"></div>`;
@@ -63,7 +64,7 @@
         if (r.start < at) continue; // 겹치는 표시는 앞의 것만 칠한다.
         if (r.start > at) nodes.push(document.createTextNode(text.slice(at, r.start)));
         const span = document.createElement('span');
-        span.className = r.kind === 'applied' ? 'a' : 'q';
+        span.className = r.kind === 'applied' ? 'a' : r.kind === 'pick' ? 'p' : 'q';
         if (r.label != null) span.dataset.n = String(r.label);
         span.textContent = text.slice(r.start, r.end);
         nodes.push(span); at = r.end;
@@ -74,6 +75,35 @@
     }
     layer.scrollTop = ta.scrollTop; layer.scrollLeft = ta.scrollLeft;
   }
+  // 답변란 속 [start, end) 글자의 화면 위치(줄마다 한 칸). 답변란 안에 보이는 줄만 돌려준다.
+  let probe;
+  function measure(start, end) {
+    const current = (() => { const all = [...document.querySelectorAll('textarea.answer')]; return all.find(t => t.getClientRects().length) || all[0] || null; })();
+    if (!current || !current.isConnected) return null;
+    const text = current.value || '';
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start || end > text.length) return null;
+    const rect = current.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    if (!probe) {
+      probe = document.createElement('div');
+      probe.setAttribute('aria-hidden', 'true');
+      probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;overflow:hidden;white-space:pre-wrap;overflow-wrap:break-word;word-wrap:break-word;z-index:-1;';
+      (document.body || document.documentElement).appendChild(probe);
+    }
+    const cs = getComputedStyle(current);
+    for (const p of COPY) { try { probe.style[p] = cs[p]; } catch { /* 무시 */ } }
+    probe.style.boxSizing = 'border-box';
+    Object.assign(probe.style, { left: rect.left + 'px', top: rect.top + 'px', width: rect.width + 'px', height: rect.height + 'px' });
+    const span = document.createElement('span');
+    span.textContent = text.slice(start, end);
+    probe.replaceChildren(document.createTextNode(text.slice(0, start)), span, document.createTextNode(text.slice(end) + ' '));
+    probe.scrollTop = current.scrollTop; probe.scrollLeft = current.scrollLeft;
+    const top = rect.top + parseFloat(cs.borderTopWidth || 0), bottom = rect.bottom - parseFloat(cs.borderBottomWidth || 0);
+    const lines = [...span.getClientRects()].filter(r => r.width > 0 && r.bottom > top + 2 && r.top < bottom - 2)
+      .map(r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom }));
+    probe.replaceChildren();
+    return { box: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom }, lines };
+  }
   function schedule() { if (!frame) frame = requestAnimationFrame(paint); }
   document.addEventListener('scroll', schedule, true);
   document.addEventListener('input', e => { if (e.target?.matches?.('textarea.answer')) schedule(); }, true);
@@ -82,6 +112,7 @@
   setInterval(() => { if (ranges.length || (host && host.style.display !== 'none')) paint(); }, 400);
   window.JSLFeedbackMarks = {
     set(next) { ranges = Array.isArray(next) ? next : []; schedule(); },
-    clear() { ranges = []; schedule(); }
+    clear() { ranges = []; schedule(); },
+    measure
   };
 })();

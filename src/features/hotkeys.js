@@ -22,6 +22,7 @@ JSL.register('hotkeys', function () {
     { group: '검수 (답변란)' },
     { keys: 'Tab / Shift+Tab', desc: '다음 / 이전 문장' },
     { keys: 'Esc', desc: '답변란 벗어나기' },
+    { keys: 'Alt+Q', desc: '고른 곳을 GPT에게 질문 (도착한 수정안 열기)' },
     { keys: 'Alt+/', desc: '이 안내 열기·닫기' }
   ];
 
@@ -146,7 +147,7 @@ JSL.register('hotkeys', function () {
   // capture 단계 리스너 — textarea 포커스 중에도 동작
   document.addEventListener('keydown', function (e) {
     try {
-      // GPT 질문 버블·대시보드 질문 화면의 입력은 별도 초안이다. capture 단계에서 원본 저장/문항 전환을 막는다.
+      // GPT 질문 바의 입력은 답변과 별개다. capture 단계에서 원본 저장/문항 전환을 막는다.
       if (e.composedPath().some(el => el.id === 'jsl-gpt-feedback' || (el.dataset && el.dataset.jslIsolate === 'true'))) return;
       if (e.isComposing) return; // 한글 조합 중이면 무시
       if (handleKey(e)) {

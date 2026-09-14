@@ -137,10 +137,6 @@ JSL.ui.addQnaAction(number, labelHTML, onClick, opts?) // 문항 카드 우측 �
 //   emphasis:'primary'는 작성중(확장) 카드에서만 주황 채움 버튼으로 승격되고 그 외엔 아이콘.
 //   여러 개를 등록하면 등록 순서대로 한 묶음(.qna-btns)에 나란히 붙는다.
 JSL.ui.setWarning(number, text|null) // 문항 행에 경고 문구 표시/해제 (예: "48자 초과")
-JSL.ui.openView({id, title, meta, el, actions, css, onBack}, {expand?}) // 본문·액션줄을 기능 화면으로 잠시 교체
-//   el/actions는 기능이 만든 엘리먼트를 옮겨 붙이며 대시보드 재렌더에도 다시 만들지 않는다(입력 포커스 보존).
-//   css는 대시보드 Shadow DOM에 한 번만 넣는다. 머리줄 ‹ 문항은 화면을 닫고 onBack을 부른다.
-JSL.ui.closeView(id) / JSL.ui.updateView(id, {title, meta}) / JSL.ui.isViewOpen(id)
 ```
 
 dashboard가 없거나 5초 내 ready 안 되면, 다른 기능은 UI 추가를 포기하고
@@ -1376,53 +1372,64 @@ Canvas를 사용할 수 없어도 호출·닫기 동작과 라벨은 유지한�
 - 코드는 바닐라 JS (빌드 없음, `chrome://extensions` 개발자 모드 로드). 주석과 UI 문구는 한국어.
 # ChatGPT 응답 일괄 입력
 
-## 현재 문항 인용 질문 → 웹 GPT → 인용별 제안 — 2026-09-14
+## 고른 곳 하나 GPT 질문 바 → 웹 GPT → 그 자리에서 바꾸기 — 2026-09-15
 
-기획: [docs/gpt-feedback-review-plan.md](docs/gpt-feedback-review-plan.md). 한 요청은 한 문항에만 속한다.
+기획: [docs/gpt-feedback-review-plan.md](docs/gpt-feedback-review-plan.md). 질문 칸은 자소설 탭마다 하나이고, 질문 하나는 한 문항의 고른 곳 하나에만 속한다.
+2026-09-14의 인용 여러 개·대시보드 `GPT 질문` 화면(`JSL.ui.openView`)은 없앴다.
 
-- **담기**: `textarea.answer` 선택 → 버블 `빠진 맥락 | AI 티 | 질문`(`#jsl-gpt-feedback` Shadow DOM). 조합 중·선택 없음·스크롤·다른 곳 클릭이면 숨긴다.
-  같은 시작/끝을 다시 담으면 종류만 바꾼다. 번호는 추가 순서로 고정하고 삭제 뒤 재번호를 매기지 않는다. 최대 20개, 원문 8,000자·메모 4,000자.
-  보낸 요청이 끝나기 전(기다리는 중·답 도착)에는 새로 담지 않는다.
-- **화면**: `JSL.ui.openView`로 대시보드 본문을 `GPT 질문` 화면으로 바꾼다(새 창 없음). 대시보드 토큰(`.card/.st/.cat/.copy-btn/.jsl-action-btn`)만 쓴다.
-  단계는 담는 중 → 보내는 중 → 기다리는 중 → 답 도착(검토) 및 확인 불가. 맨 아래 주 버튼 한 개가 단계별 동작·비활성 이유를 문구로 보여준다
-  (`질문 내용을 적어 주세요` → `원문이 바뀐 인용을 빼 주세요` → `보낼 GPT 대화를 골라 주세요` → `GPT로 보내기 · N`).
-  화면 입력에는 `data-jsl-isolate`를 두어 단축키(저장·문항 전환)가 가로채지 않는다.
-- **순수 계약** `src/core/gpt-feedback.js`(`JSLFeedback`): 초안 version 2 `{resumeId, question, answer, quotes[{id,start,end,text,kind:'context'|'tone'|'ask',feedback,lost?}], nextId, review, attempt?}`.
-  `rebase`는 편집된 답변에서 기록 위치에 같은 원문이 있으면 유지, 없으면 **정확히 한 번** 있는 곳으로 옮기고, 아니면 `lost`로 둔다(추측하지 않음).
-  전송은 `lost` 없음·질문 종류 메모 필수·지원서/문항/모델 답변/입력란 원문 일치를 요구한다. version 1 초안은 새로 만든다.
-  모델 답변과 입력란 비교는 `sameAnswer`로 서버 CRLF와 ng-model 앞뒤 공백 잘림만 같은 답변으로 본다. 인용 위치·교체는 항상 보이는 입력란 값 기준이다.
-- **요청 형식**: 첫 줄 `[자비스 요청]` 표지, 문항 질문, 규칙(대화에 없는 사실 생성 금지·근거 부족 시 확인 필요·인용 밖 수정 금지),
-  답 형식 `### 인용 N / 진단: / 수정안: 코드 블록 / 확인 필요:`, 인용마다 `[인용 N · 종류]` 원문·같은 문단 앞뒤 120자 문맥·종류별 요청·덧붙임.
-  내부 지원서/문항 ID·revision·요청 ID는 넣지 않는다. 표지는 응답 판별과 기존 적용 패널 제외에만 쓴다.
-- **전송** `src/core/gpt-feedback-background.js`: 기존 연결 역조회·명시적 선택, 중복 탭 거부, 닫힌 대화 재열기, 입력창 준비 10초,
-  `preparing → ready → committing → sent/unknown` 또는 `blocked`. 클릭 뒤 8초 안에 새로 생긴 사용자 메시지가 보낸 원문과 같거나
-  첫 줄(`JSLFeedback.headline`: 표지·문항 번호·인용 수)로 시작해야 `sent`이며 그 메시지 ID를 기록한다. 실제 GPT는 보낸 메시지의 코드 블록을 꾸며 보여줘
-  표시 글자가 원문과 달라지므로 첫 줄로 인정한다. 못 찾으면 `unknown`. `sent` 뒤에는 GPT 탭에 머문다(뒤로 간 ChatGPT 탭은 답을 끝까지 그리지 않아 완료를 읽지 못한 사례, 2026-09-15 실사이트).
-  답 판독이 끝나면 GPT 탭의 답 아래에 `[data-jsl-feedback]` `자소설에서 받기 ↗`를 30분 동안 유지한다(React 재렌더 시 다시 붙임). 누르면 `feedback:return`으로 보낸 자소설 탭을 앞으로 가져오고
-  `feedback:open`으로 그 요청 화면을 연다(다른 문항이면 전환 후 연다). 자소설에서 30초 넘게 진행이 없으면 GPT 탭을 앞에 열어 두라는 안내를 붙인다.
-  `unknown`에서 사용자가 `보냈어요 · 답 가져오기`(`feedback:claim`)를 누르면 다시 보내지 않고, 이미 열린 그 대화 탭에서 첫 줄로 시작하는 마지막 사용자 메시지를
-  찾아(`feedback:locate`) `sent`로 바꾸고 감시를 시작한다(`feedback:start-watch`). 대화 탭이 없거나 여러 개거나 메시지를 못 찾으면 이유를 보여주고 바꾸지 않는다. 확인 불가·재시작된 진행 기록은 자동 재전송하지 않는다.
-  사용자가 `보내지 않았다면 다시 보내기`를 누르면 이전 기록을 정리하고 새 요청 ID로 보낸다. 끝난 기록에서 답변 원문을 지우고 `request.quotes`(id·종류·원문)만 남긴다.
+- **고르기**: 보이는 `textarea.answer`에 포커스가 있고 공백만이 아닌 선택이 있을 때(`pointerup`, `selectionchange`, `select`, `keyup`) 질문 바
+  `✦ 이 부분 GPT에게 질문 Alt+Q`를 띄운다(`#jsl-gpt-feedback` Shadow DOM, `data-jsl-isolate`). 드래그 중·한글 조합 중에는 띄우지 않고,
+  선택이 접히거나 답변란·바 밖을 누르거나 답변란에서 포커스가 나가면 닫는다. 바를 눌러도 답변란 선택은 유지된다. 우클릭 메뉴·종류 버블은 없다.
+- **질문 칸**: 바 클릭 또는 `Alt+Q`(답변란·바 안에서만)로 연다. 커서를 질문 칸으로 옮기고 고른 곳을 표시 층에 연주황으로 칠해 둔다.
+  `Enter` 보내기(IME 조합 중 제외), `Shift+Enter` 줄바꿈, `Esc` 닫고 답변란 선택 복원. 질문은 비워도 되며 최대 4,000자, 고른 곳은 최대 8,000자.
+  칸의 키 입력은 Shadow root에서 전파를 막고 `hotkeys`도 무시해 사이트 저장·문항 전환이 가로채지 않는다. 대화를 고르지 않았으면 칸 안 목록을 연다.
+  칸에 글이 있으면 답변란을 다시 눌러도 칸을 유지하고, 새로 고르면 그곳으로 바꾼다. 편집으로 고른 글을 유일하게 찾지 못하면 `고른 곳이 바뀌었어요`로 막는다.
+- **상태 표시**(같은 떠 있는 자리): `offer` → `compose`(보내는 중에는 입력 잠금) → `waiting` 알약(`GPT가 고치는 중 · 경과`, 쓰기 시작하면 `GPT가 답을 쓰는 중`,
+  45초 무진행이면 `GPT 탭 보기`, `취소`) → `result` 카드(`Esc` 또는 `접기`로 `arrived` 알약) → `applied` 알약(`✓ 바꿨어요 · 되돌리기`, 8초 뒤 닫고 기록 정리).
+  확인 불가는 `unknown` 카드, GPT 탭 닫힘은 `GPT 탭이 닫혔어요 · 다시 열기 · 취소`, 다른 문항이면 `N번 문항 질문 · … · 가기`를 답변란 오른쪽 위에 붙인다.
+  답이 도착해도 포커스를 뺏지 않는다. 카드에 포커스가 있을 때 `Enter`는 주 버튼, `Esc`는 접기다. `Alt+Q`는 고른 곳이 없으면 도착한 카드를 연다.
+- **자리**: `JSLFeedbackMarks.measure(start,end)`로 고른 곳의 줄 사각형과 답변란 상자를 잰다. 큰 칸(질문 칸·수정안·확인 불가)은 답변란 오른쪽 → 왼쪽 → 고른 줄 위 → 아래,
+  작은 바·알약은 위 → 아래 → 오른쪽 → 왼쪽 순으로 화면 안이면서 고른 줄·대시보드(`#jsl-dashboard .wrap`)와 겹치지 않는 첫 자리에 둔다.
+  옆자리가 300px 이상이면 칸 폭을 그 자리에 맞춘다(질문 칸 380px·수정안 400px 이하). 모두 안 되면 위·아래 중 넓은 쪽에서 최대 높이를 줄인다.
+  한 번 고른 자리를 먼저 다시 본다. 고른 곳이 답변란 밖으로 스크롤되면 바는 숨기고 상태는 답변란 오른쪽 위에 붙인다. 답변란이 다른 요소에 가려지면 숨긴다(질문 칸 제외).
+- **순수 계약** `src/core/gpt-feedback.js`(`JSLFeedback`): 질문 version 3 `{resumeId, question{id,number,question}, answer, quote{start,end,text}, request}`.
+  `check`는 지원서·문항·질문 원문·모델 답변(`sameAnswer`: 서버 CRLF와 ng-model 앞뒤 공백 차이만 같다고 봄)을 대조한다. 위치는 항상 보이는 입력란 값 기준이다.
+  `locate(text, part, hint)`는 기록 위치에 같은 글이 있으면 그 자리, 아니면 **정확히 한 번** 있는 곳만 돌려준다(추측하지 않음).
+- **요청 형식**: 첫 줄 `JSLFeedback.headline(number)` = `[자비스 요청] 자소설닷컴 N번 문항 답변에 대한 질문입니다.`, 대화 근거 사용 요청, 문항 질문,
+  `고칠 부분:`, 같은 문단 앞뒤 160자 `주변 문맥:`(고른 글과 같으면 생략), `질문:`(비면 `따로 없음…`), 규칙(빠진 맥락·AI 같은 표현도 함께 고침,
+  대화에 없는 사실 생성 금지·근거 부족 시 확인 필요, 고칠 부분 밖 수정 금지, 고칠 필요 없으면 수정안 없음), 답 형식 `진단: / 수정안: 코드 블록 / 확인 필요:`.
+  내부 지원서/문항 ID·revision·요청 ID는 넣지 않는다.
+- **전송** `src/core/gpt-feedback-background.js`: 기존 연결 역조회·명시적 선택, 중복 탭 거부, 대화 탭이 없으면 `active:false`로 연다, 입력창 준비 10초,
+  `preparing → ready → committing → sent/unknown` 또는 `blocked`. 먼저 탭을 옮기지 않고 `feedback:deliver{background:true}`를 보낸다.
+  클라이언트가 입력 미반영·전송 버튼 미확인으로 멈추고(`retry`: 클릭 승인 요청 전, 사용자 편집 없음, 넣은 글 삭제 확인) 그 탭이 활성 탭이 아니었을 때만
+  GPT 탭을 활성화해 `background:false`로 한 번 더 넣고, 결과와 상관없이 자소설 탭을 다시 활성화한다. 그 밖에는 탭을 옮기지 않는다.
+  클릭 뒤 8초 안에 새 사용자 메시지가 보낸 원문과 같거나 첫 줄로 시작해야 `sent`이며 메시지 ID를 기록한다. 못 찾으면 `unknown`. 확인 불가·재시작된 진행 기록은 자동 재전송하지 않는다.
+  `unknown`의 `보냈어요 · 답 기다리기`(`feedback:claim`)는 다시 보내지 않고 열린 대화 탭에서 첫 줄로 시작하는 마지막 사용자 메시지를 찾아(`feedback:locate`) 감시를 시작한다(`feedback:start-watch`).
+  `다시 보내기`는 기록을 정리하고 같은 고른 곳·질문으로 질문 칸을 다시 연다(보내면 새 요청 ID).
+  `sent`·`unknown`이 되면 `feedback:slot:<탭>`을 이 요청으로 바꾸고 이전 요청 기록을 지운다. `blocked`는 칸을 차지하지 않는다.
+  끝난 기록에서 답변 원문을 지우고 `request{resumeId, questionId, number, quote{text,start}, request}`만 남긴다.
+- **뒤 탭 화면 갱신** `src/core/gpt-render-main.js`(chatgpt.com MAIN, `document_start`): `<html data-jsl-keep-rendering>`이 켜져 있고 `document.hidden`일 때만
+  `requestAnimationFrame`을 16ms 타이머로 돌리고 `cancelAnimationFrame`도 맞춘다. 표시는 클라이언트가 전달·감시하는 동안만 켠다.
 - **답 감시** `src/features/gpt-feedback-client.js`: 보낸 메시지 ID 바로 다음 assistant 메시지(다음 사용자 메시지 이전)만 읽는다.
   블록(제목/문단·목록/코드/경계)을 추출해 본문 길이가 바뀔 때 `feedback:reply`(streaming/complete)로 보낸다. 완료 기준은 스트리밍 표시 없음 + 턴 복사 버튼.
   시간 제한으로 실패 처리하지 않는다. 워커가 아직 `sent`를 기록하기 전이면 `pending`으로 다시 보내고, 기록이 없거나 다른 요청이면 `gone`으로 감시를 멈춘다.
-  GPT 탭 로드·대화 전환 때 `feedback:watch`로 기다리는 요청을 받아 감시를 재개한다. 기록한 메시지 ID를 찾지 못하면 첫 줄로 시작하는 마지막 사용자 메시지를 기준으로 삼는다.
-- **판독** `JSLFeedback.parseReply(blocks, quotes)`: 구간 시작은 60자 이하 `인용 N` 제목·문단(`**인용 1**`, `[인용 1]`, `인용 1 —` 허용).
-  구간의 코드 블록 1개 = 수정안(앞뒤 공백은 원문 인용 기준), `진단:`·`확인 필요:`(없음/없습니다/- 제외, 빈 값이면 다음 문단을 이어받음).
-  결과 `ready | ask | same | invalid`. 코드 2개 이상·빈 수정안·8,000자 초과·틀 문구(인용 번호, 수정안:, 백틱) 포함·구간 누락·중복은 그 인용만 `invalid`. 요청하지 않은 번호는 무시.
-  워커는 발신 출처·대화·메시지 ID·기다리는 상태를 확인한 뒤 판독 결과를 세션에 보관하고 `feedback:changed{attempt, done, questionId, number}`로 자소설 탭에 알린다.
-  완료 뒤 바뀐 응답(재생성 등)은 다시 읽지 않는다. GPT 탭이 닫히면 `lost` 표시 후 재감시 때 해제한다.
-- **받기** (자소설 탭, 그 문항이 활성일 때만): 모델 답변과 입력란이 같을 때 `locate(answer, 원문, hint)` — hint는 앞서 받은 인용의 길이 변화만큼 보정한 위치.
-  못 찾으면 `stale`(쓰지 않음, 수정안 복사). 찾으면 그 구간만 교체한 전체 문자열을 `setAnswer`로 쓰고 모델·입력란 재조회가 기대값과 같을 때만 `applied{at, replacement, original}`.
-  `모두 받기`는 앞에서부터 같은 절차. `되돌리기`는 받은 수정안을 같은 방식으로 찾아 원문으로 바꾸며, 못 찾으면 쓰지 않는다. 저장 버튼은 호출하지 않는다.
-- **답변란 표시** `src/features/gpt-feedback-marks.js`: 답변란과 폰트·여백을 맞춘 글자 투명·클릭 통과 층. 담은 인용은 밑줄+번호, 받은 구간은 연주황 배경.
-  답변란이 다른 요소에 가려지거나 문항·페이지가 바뀌면 숨기고, 위치를 못 찾은 표시는 지운다.
-- **알림**: GPT 질문 화면이 닫혀 있을 때 현재 문항의 답이 오면 `제안 보기` 토스트, 다른 문항이면 `N번 문항으로` 토스트(전환 후 화면 열기). 대시보드 `GPT 질문` 라벨에 담은 수·기다리는 중·제안 수를 붙인다.
-- **보관**: 영구 저장은 기존 `feedback-chat:*`·`feedback-preferred:*`뿐이다. 세션에 `feedback:draft:<탭>:<지원서>:<문항>`(초안·받기 결정)과
-  `feedback:attempt:<요청>`(인용·메시지 ID·진행·판독 결과)을 둔다. 원본 탭 닫기·브라우저/확장 재시작 시 삭제한다.
+  GPT 탭 로드·대화 전환 때 `feedback:watch`로 기다리는 요청을 받아 감시를 재개한다. GPT 답 화면에는 확장 UI를 붙이지 않는다.
+- **판독** `JSLFeedback.parseAnswer(blocks, quoteText)`: 코드 블록 1개 = 수정안(앞뒤 공백은 고른 글 기준), `진단:`·`확인 필요:`(없음/없습니다/- 제외, 빈 값이면 다음 줄을 이어받음).
+  결과 `ready | same | ask(수정안 없이 확인 필요) | note(수정안 없이 진단만) | invalid`. 코드 2개 이상·빈 수정안·8,000자 초과·틀 문구 포함·형식 없음은 `invalid`.
+  워커는 발신 출처·대화·메시지 ID·기다리는 상태를 확인한 뒤 `reply{item, completedAt}`을 보관하고 `feedback:changed{attempt, done, questionId, number}`로 알린다(쓰는 중 알림은 한 번).
+  완료 뒤 바뀐 응답은 다시 읽지 않는다. GPT 탭이 닫히면 `lost` 표시 후 재감시 때 해제한다.
+- **바꾸기** (질문한 문항이 활성일 때만): 모델 답변과 입력란이 같을 때 `locate(입력란, 고른 글, 보낸 위치)`. 못 찾으면 `review{state:'stale'}`(쓰지 않음, 수정안 복사).
+  찾으면 그 구간만 교체한 전체 문자열을 `setAnswer`로 쓰고 모델·입력란 재조회가 기대값과 같을 때만 `review{state:'applied', at, replacement, original}`을
+  `feedback:review`로 기록한다(워커는 받은 수정안·고른 글과 같을 때만 받는다). `되돌리기`는 바꾼 글을 같은 방식으로 찾을 때만 원문으로 되돌리고 기록을 지운다.
+  사용자가 바꾼 곳을 직접 고치면 되돌리기를 거둔다. 새로고침 뒤 `applied` 기록은 정리하고 다시 띄우지 않는다. 저장 버튼은 호출하지 않는다.
+- **답변란 표시** `src/features/gpt-feedback-marks.js`: 답변란과 폰트·여백을 맞춘 글자 투명·클릭 통과 층. 질문 칸에 쓰는 동안 고른 곳 연주황, 질문한 곳 밑줄, 바꾼 곳 연주황 배경.
+  답변란이 다른 요소에 가려지거나 문항·페이지가 바뀌면 숨긴다.
+- **알림**: 답 도착 때 답변란이 화면에 없을 때만 `GPT 답 도착 · N번 문항` 토스트(`보기`/`N번 문항으로`). 대시보드에는 GPT 질문 버튼·화면이 없다.
+- **보관**: 영구 저장은 기존 `feedback-chat:*`·`feedback-preferred:*`뿐이다. 세션에 `feedback:slot:<탭>`(요청 ID)과 `feedback:attempt:<요청>`
+  (고른 글·위치·질문·메시지 ID·진행·판독 결과·바꾼 기록)을 둔다. 원본 탭 닫기·브라우저/확장 재시작 시 삭제한다. 보내기 전 질문 칸 글은 페이지 메모리에만 있다.
 - **적용 패널 제외**: `gpt-response.js`는 직전 사용자 메시지가 `[자비스 요청]`으로 시작하는 assistant 메시지에 문항 전체 적용 패널을 붙이지 않는다.
 
-검증 명령과 가상/실사이트 구분은 [GPT 검증](tests/gpt/README.md)의 인용 질문 절을 따른다.
+검증 명령과 가상/실사이트 구분은 [GPT 검증](tests/gpt/README.md)의 질문 바 절을 따른다.
 
 ## 복합 문항명·본 질문 대응과 유사도 추천 — 2026-09-13
 

@@ -65,8 +65,6 @@
   var qnaActions = [];        // addQnaAction 등록 목록 [{number, labelHTML, onClick, el}]
   var warnings = new Map();   // 문항별 경고 문구 (number -> text)
   var actionQueue = [];       // 렌더 전 addAction 호출 대기열 [{btn, slot}]
-  var views = {};             // openView로 등록한 기능 화면 {id: spec}
-  var activeView = null;      // 지금 본문을 차지한 기능 화면 id
 
   // ── JSL.ui 계약 (다른 기능이 소비) ─────────────────────────
   var readyResolve;
@@ -162,33 +160,7 @@
       if (text === null || text === undefined || text === '') warnings.delete(Number(number));
       else warnings.set(Number(number), String(text));
       renderBody();
-    },
-
-    // 기능 화면 — 새 창 없이 본문과 액션줄을 잠시 기능 화면으로 바꾼다.
-    // spec: {id, title, meta, el, actions, css, onBack}
-    //  - el/actions는 기능이 만든 엘리먼트를 그대로 옮겨 붙인다. 대시보드 재렌더에도 다시 만들지 않으므로
-    //    입력 중인 칸의 포커스·조합이 끊기지 않는다.
-    //  - css는 대시보드 Shadow DOM에 한 번만 넣는다. 대시보드 토큰(.card/.st/.cat/.copy-btn)을 그대로 쓸 수 있다.
-    //  - opts.expand: 접혀 있으면 펼친다(사용자가 방금 요청한 경우에만).
-    openView: function (spec, opts) {
-      if (!spec || !spec.id || !spec.el) return;
-      views[spec.id] = spec;
-      activeView = spec.id;
-      if (opts && opts.expand && collapsed) toggleCollapsed();
-      renderView();
-    },
-    closeView: function (id) {
-      if (activeView !== id) return;
-      activeView = null;
-      renderView();
-      renderBody();
-    },
-    updateView: function (id, patch) {
-      if (!views[id]) return;
-      Object.assign(views[id], patch || {});
-      if (activeView === id) renderView();
-    },
-    isViewOpen: function (id) { return activeView === id; }
+    }
   };
 
   // ── 유틸 ──────────────────────────────────────────────────
@@ -402,29 +374,8 @@
     });
   }
 
-  // 기능 화면 머리줄·본문·액션줄 교체. 이미 붙어 있으면 옮기지 않는다(입력 포커스 보존).
-  function renderView() {
-    if (!els.body) return;
-    var spec = activeView && views[activeView];
-    els.viewHead.hidden = !spec;
-    els.actions.style.display = spec ? 'none' : '';
-    els.viewActions.style.display = spec ? '' : 'none';
-    if (!spec) { els.viewActions.replaceChildren(); return; }
-    if (spec.css && !shadow.querySelector('style[data-view="' + spec.id + '"]')) {
-      var st = document.createElement('style');
-      st.dataset.view = spec.id;
-      st.textContent = spec.css;
-      shadow.appendChild(st);
-    }
-    els.viewTitle.textContent = spec.title || '';
-    els.viewMeta.textContent = spec.meta || '';
-    if (els.body.firstChild !== spec.el || els.body.childNodes.length !== 1) els.body.replaceChildren(spec.el);
-    if (spec.actions && (els.viewActions.firstChild !== spec.actions || els.viewActions.childNodes.length !== 1)) els.viewActions.replaceChildren(spec.actions);
-  }
-
   function renderBody() {
     if (!els.body) return;
-    if (activeView && views[activeView]) { renderView(); return; }
     els.body.innerHTML = '';
 
     if (!lastState || !Array.isArray(lastState.qnas) || lastState.qnas.length === 0) {
@@ -1188,17 +1139,7 @@
         '.jsl-header-btn.toggle .sw::after{content:"";position:absolute;top:2px;left:2px;',
         '  width:13px;height:13px;border-radius:50%;background:#fff;transition:left .2s;}',
         '.jsl-header-btn.toggle.on .sw{background:#ff6a00;}',
-        '.jsl-header-btn.toggle.on .sw::after{left:15px;}',
-        // 기능 화면(openView) 머리줄·액션줄 — 문항 목록과 같은 흰 본문 위에 얹는다
-        '.view-head{display:flex;align-items:center;gap:8px;padding:12px 16px 4px;}',
-        '.view-head[hidden]{display:none;}',
-        '.view-back{flex:none;border:0;background:transparent;color:#b8a794;font-size:12px;font-weight:600;',
-        '  font-family:inherit;padding:3px 6px 3px 0;border-radius:6px;cursor:pointer;}',
-        '.view-back:hover{color:#ff6a00;}',
-        '.view-back:focus-visible{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px #e05e00;}',
-        '.view-title{flex:1;min-width:0;font-size:13px;color:#1f1a15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
-        '.view-meta{flex:none;font-size:11px;color:#8a6a4d;}',
-        '.view-actions{padding:11px 16px 14px;border-top:1px solid #f8f1ea;background:#fff;}'
+        '.jsl-header-btn.toggle.on .sw::after{left:15px;}'
         // 토스트 스타일은 이 shadow root에 없다 — 화면 우하단 별도 레이어(TOAST_CSS)로 옮겼다.
       ].join('\n');
       shadow.appendChild(style);
@@ -1272,43 +1213,12 @@
 
       var panel = document.createElement('div');
       panel.className = 'panel';
-      // 기능 화면 머리줄 — ‹ 문항으로 돌아가기 + 화면 이름 + 보조 정보
-      var viewHead = document.createElement('div');
-      viewHead.className = 'view-head';
-      viewHead.hidden = true;
-      var viewBack = document.createElement('button');
-      viewBack.className = 'view-back';
-      viewBack.type = 'button';
-      viewBack.textContent = '‹ 문항';
-      viewBack.setAttribute('aria-label', '문항 목록으로 돌아가기');
-      viewBack.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var spec = activeView && views[activeView];
-        activeView = null;
-        renderView();
-        renderBody();
-        if (spec && typeof spec.onBack === 'function') {
-          try { spec.onBack(); } catch (err) { console.warn('[자비스] 화면 닫기 오류', err); }
-        }
-      });
-      var viewTitle = document.createElement('b');
-      viewTitle.className = 'view-title';
-      var viewMeta = document.createElement('span');
-      viewMeta.className = 'view-meta';
-      viewHead.appendChild(viewBack);
-      viewHead.appendChild(viewTitle);
-      viewHead.appendChild(viewMeta);
-      panel.appendChild(viewHead);
       var body = document.createElement('div');
       body.className = 'body';
       panel.appendChild(body);
       var actions = document.createElement('div');
       actions.className = 'actions';
       panel.appendChild(actions);
-      var viewActions = document.createElement('div');
-      viewActions.className = 'view-actions';
-      viewActions.style.display = 'none';
-      panel.appendChild(viewActions);
       wrap.appendChild(panel);
 
       shadow.appendChild(wrap);
@@ -1317,8 +1227,7 @@
       els = {
         wrap: wrap, header: header, title: title, sub: sub, dday: dday, toggle: toggle,
         body: body, actions: actions, toasts: ensureToastLayer(), headerBtns: headerBtns,
-        segbar: segbar, moreWrap: moreWrap, moreBtn: moreBtn,
-        viewHead: viewHead, viewTitle: viewTitle, viewMeta: viewMeta, viewActions: viewActions
+        segbar: segbar, moreWrap: moreWrap, moreBtn: moreBtn
       };
 
       // 렌더 전에 들어온 addAction 버튼 부착

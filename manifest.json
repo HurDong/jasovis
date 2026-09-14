@@ -36,6 +36,16 @@
       "matches": [
         "https://chatgpt.com/*"
       ],
+      "js": [
+        "src/core/gpt-render-main.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*"
+      ],
       "css": [
         "src/features/gpt-response.css"
       ],

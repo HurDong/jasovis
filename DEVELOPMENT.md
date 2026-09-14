@@ -6,9 +6,9 @@
 ## 서비스와 실행 환경
 
 자비스는 자소설닷컴의 자소서 편집·전형 목록·채팅을 보조하는 비공식 Chrome MV3 확장이다.
-ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하고, 현재 답변의 선택 인용에 관한 질문을 연결된 GPT 대화에 전송한다.
+ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하고, 현재 답변에서 고른 곳 하나에 관한 질문을 연결된 GPT 대화에 전송한다.
 별도 백엔드·OpenAI API·빌드 과정은 없다. 소스와 `manifest.json`이 있는 저장소 루트를 Chrome에 로드한다.
-영구 보관은 `chrome.storage.local`, GPT 질문 초안·전송 중복 방지는 `chrome.storage.session`을 사용한다.
+영구 보관은 `chrome.storage.local`, GPT 질문 전송 기록·중복 방지는 `chrome.storage.session`을 사용한다.
 사이트 기능은 기존 로그인 상태로 사이트와 통신할 수 있다.
 
 | 실행 위치 | 역할 / 진입점 |
@@ -44,9 +44,8 @@ ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하고, 현재 �
 | 채팅 색·레이아웃 | `src/features/chat-design.css` |
 | GPT 추출·문항 대응 | `src/core/gpt-protocol.js`, `src/features/gpt-response.js` |
 | GPT 연결·라우팅 | `src/core/gpt-background.js`, `src/features/gpt-connect.js` |
-| 현재 문항 인용 질문·제안 UI | `src/core/gpt-feedback.js`(순수 계약·요청 형식·판독·위치), `src/features/gpt-feedback.js`(버블·대시보드 화면·받기), `gpt-feedback-marks.js`(답변란 표시) |
-| 자소설 → GPT → 자소설 | `src/core/gpt-feedback-background.js`(세션·검증·라우팅·답 보관), `src/features/gpt-feedback-client.js`(웹 입력·전송 확인·답 감시) |
-| 대시보드 기능 화면 | `src/features/dashboard.js`의 `JSL.ui.openView/closeView/updateView` |
+| GPT 질문 바 UI | `src/core/gpt-feedback.js`(순수 계약·요청 형식·판독·위치), `src/features/gpt-feedback.js`(고르기 감지·질문 바·수정안 카드·자리 찾기·바꾸기), `gpt-feedback-marks.js`(답변란 표시·줄 위치 측정) |
+| 자소설 → GPT → 자소설 | `src/core/gpt-feedback-background.js`(세션·검증·뒤 탭 전달·질문 칸·답 보관), `src/features/gpt-feedback-client.js`(웹 입력·전송 확인·답 감시), `src/core/gpt-render-main.js`(뒤 탭 화면 갱신 보조) |
 | 외부 복사 패널 / 호출 버튼 | `src/features/relay-panel.js`, `relay-source.js`, `src/options/options.html`, `src/core/gpt-background.js`의 `relay:` 경로 |
 | 내 이력 직접 입력 / 저장 / 편집 | `src/core/relay-profile.js`(검증·병합·틀), `src/features/relay-panel.js`(패널 안 ✎ 수정·추가·삭제·JSON). 옵션 화면에는 편집 UI 없음. 사용자 정보는 로컬 storage에만 보관 |
 | GPT UI 스타일 | `src/features/gpt-response.css` |
@@ -87,20 +86,23 @@ ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하고, 현재 �
 연결은 다음 적용에서 대상 선택을 줄이는 편의 기능이며 자동 동기화가 아니다.
 저장 버튼은 호출하지 않는다. 모델 입력 확인은 사이트 서버 저장 확인과 다르며, 사이트 입력 훅의 자동 저장 여부는 별도다.
 
-## 현재 문항 GPT 질문
+## 현재 문항 GPT 질문 바
 
-- 선택 범위는 `textarea.answer`의 UTF-16 시작/끝 위치와 선택 당시 원문에 고정한다. 다른 문항의 인용을 한 요청에 모으지 않는다.
+- 질문 하나는 한 문항의 고른 곳 하나(`textarea.answer`의 UTF-16 시작/끝과 보낼 때 원문)에만 속한다. 질문 칸은 자소설 탭마다 하나다.
 - `feedback:` 메시지는 기존 `gpt:` 답변 적용과 분리한다. `gpt:state`로 현재 문항·문서와 원문을 재확인한다.
 - 기존 `gpt-conversation:*` 연결을 역으로 찾는다. 미연결 대화를 사용자가 선택하면 같은 연결 계약을 만든다.
   자동으로 회사 이름을 추측하거나 새로운 GPT 대화/프로젝트를 만들지 않는다.
+- 탭을 옮기지 않는 것이 기본이다. 뒤 탭 입력이 반영되지 않을 때만 GPT 탭을 잠깐 활성화했다가 곧바로 자소설 탭으로 돌아온다.
+  재시도 조건(클릭 승인 요청 전·사용자 편집 없음·넣은 글 삭제 확인)을 넓히지 않는다. 넓히면 같은 질문이 두 번 보내질 수 있다.
 - `feedback:authorize`는 실제 전송 클릭 직전에 출처·연결 revision·현재 원문을 재검증한다.
   세션에 클릭 가능 상태를 기록한 뒤 승인하며, 워커가 재시작돼도 같은 요청을 다시 클릭하지 않는다.
-- 기존 GPT 입력·생성 상태를 보존한다. 사용자 메시지 ID와 본문을 확인한 경우만 성공이다.
+- 기존 GPT 입력·생성 상태를 보존한다. 사용자 메시지 ID와 본문(또는 첫 줄)을 확인한 경우만 성공이다.
   확인 불가 요청은 자동 재시도하지 않으며, 실제 사이트 전송 시험은 별도 구체적인 허용 범위를 확인한다.
-- 원문/질문이 들어 있는 초안은 같은 탭·지원서·문항의 세션 안에서만 복원한다. 개인정보 처리 범위는 PRIVACY도 함께 수정한다.
-- 요청 형식과 판독 규칙은 `JSLFeedback.prompt/parseReply` 한 곳에서 바꾼다. 형식을 바꾸면 가상 GPT 응답(`feedback.browser.cjs`)과 단위 테스트를 함께 갱신한다.
-- 답은 보낸 메시지 ID 다음 assistant 메시지만 읽는다. 받기는 `locate`로 위치가 확정될 때만 `setAnswer`로 쓰고, 추측으로 덮어쓰지 않는다.
-- 실제 ChatGPT DOM에서의 답 판독·뒤 탭 완료 감지는 가상 페이지로 대신 검증했다. 실계정 전송 시험은 사용자 허락 범위에서만 한다.
+- 요청 형식과 판독 규칙은 `JSLFeedback.prompt/parseAnswer` 한 곳에서 바꾼다. 형식을 바꾸면 가상 GPT 응답(`feedback.browser.cjs`)과 단위 테스트를 함께 갱신한다.
+- 답은 보낸 메시지 ID 다음 assistant 메시지만 읽는다. 바꾸기는 `locate`로 위치가 확정될 때만 `setAnswer`로 쓰고, 추측으로 덮어쓰지 않는다.
+- 떠 있는 UI 자리는 `gpt-feedback.js`의 `place()` 한 곳에서 정한다. 고른 줄·대시보드를 가리지 않는 조건을 유지하고, 바꾸면 `feedback.browser.cjs`의 미가림 검사를 함께 본다.
+- `gpt-render-main.js`는 ChatGPT 페이지 전역 `requestAnimationFrame`을 감싸므로 표시(`data-jsl-keep-rendering`)가 켜진 숨은 탭에서만 동작해야 한다.
+- 실제 ChatGPT 뒤 탭의 입력·답 판독은 가상 페이지로 대신할 수 없다. 실계정 전송 시험은 사용자 허락 범위에서만 한다.
 
 ## 디자인·행동 결정
 

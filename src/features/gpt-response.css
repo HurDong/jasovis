@@ -1,12 +1,3 @@
-/* 인용 질문 답 아래의 "자소설에서 받기" — 적용 패널과 같은 모양 */
-[data-jsl-feedback] { box-sizing: border-box; width: 100%; min-width: 0; margin: 14px 0 8px; padding: 12px 0; border-top: 1px solid #8884; font-size: 13px; line-height: 1.5; color: inherit; }
-[data-jsl-feedback] .jsl-gpt-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-[data-jsl-feedback] button { font: inherit; border-radius: 8px; padding: 7px 10px; cursor: pointer; background: #ff6b00; color: #1b1b1b; border: 1px solid #ff6b00; font-weight: 700; }
-[data-jsl-feedback] button:hover { background: #ff8124; }
-[data-jsl-feedback] button:disabled { opacity: .55; cursor: wait; }
-[data-jsl-feedback] button:focus-visible { outline: 2px solid #ff6b00; outline-offset: 2px; }
-[data-jsl-feedback] .jsl-gpt-muted { opacity: .72; overflow-wrap: anywhere; }
-
 [data-jsl-gpt] { box-sizing: border-box; width: 100%; min-width: 0; margin: 14px 0 8px; padding: 12px 0; border-top: 1px solid #8884; font-size: 13px; line-height: 1.5; color: inherit; }
 [data-jsl-gpt] .jsl-gpt-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 [data-jsl-gpt] button, [data-jsl-gpt] select { font: inherit; color: inherit; border: 1px solid #8886; border-radius: 8px; background: transparent; padding: 7px 10px; cursor: pointer; }
