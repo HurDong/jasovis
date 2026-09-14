@@ -95,7 +95,7 @@
     entry.connected.title = link ? '연결: ' + link.resume.title : '이 대화에 연결된 지원서 없음';
     entry.dot.hidden = !link;
     entry.connected.classList.toggle('jsl-gpt-off', !link);
-    entry.change.hidden = !link; entry.unlink.hidden = !link;
+    entry.change.hidden = !link; entry.unlink.hidden = !link; entry.forget.hidden = !link;
   }
   async function task(entry, fn) {
     if (busy) { setStatus(entry, 'attn', '다른 응답의 입력을 처리 중입니다.'); return; }
@@ -127,8 +127,10 @@
   function chooseMapping(entry, mapping, tabId, expected) {
     entry.choices.replaceChildren();
     const pending = mapping.rows.filter(row => !row.target).length;
-    setStatus(entry, 'attn', '답변 ' + pending + '개를 자동으로 맞추지 못했습니다.', '대상 문항을 고르거나 제외하세요.');
+    setStatus(entry, 'attn', '답변 ' + pending + '개를 자동으로 맞추지 못했습니다.',
+      mapping.rows.length + '개 중 ' + (mapping.rows.length - pending) + '개 대응 · ' + pending + '개 선택 필요. 모두 선택 또는 제외한 뒤 적용합니다.');
     const selects = [];
+    const explicit = new Set();
     for (const [index, row] of mapping.rows.entries()) {
       const item = el('div', null, 'jsl-gpt-candidate');
       const head = el('div', null, 'jsl-gpt-card-head');
@@ -140,6 +142,10 @@
       if (row.reason) item.append(el('div', row.reason, 'jsl-gpt-reason'));
       const suggested = mapping.qnas.find(q => q.id === row.suggestion);
       if (suggested) item.append(el('div', '문항 ' + suggested.number + '의 질문이 비슷합니다. 원문을 비교한 뒤 선택하세요.', 'jsl-gpt-muted'));
+      if (row.target) {
+        const q = mapping.qnas.find(q => q.id === row.target);
+        item.append(el('div', '대응: 문항 ' + q.number + ' · ' + q.question, 'jsl-gpt-muted'));
+      }
       // 접어 두지 않는다. 어떤 답변을 어디에 넣는지가 선택의 근거다.
       const preview = el('pre', row.candidate.text, 'jsl-gpt-preview');
       const more = button('전체 보기', () => {
@@ -154,15 +160,29 @@
         const option = el('option', (value === row.suggestion ? '추천 · ' : '') + label); option.value = value; select.append(option);
       }
       select.value = row.target || '';
+      select.setAttribute('aria-label', '응답 ' + (index + 1) + ' 대상 문항');
+      const comparison = el('div', null, 'jsl-gpt-comparison');
+      const showComparison = () => {
+        const pairs = select.value ? (row.comparisons || []).filter(p => p.id === select.value) :
+          (row.comparisons || []).filter(p => p.id === row.suggestion || p.identity || p.evidence.includes('question'));
+        comparison.replaceChildren();
+        for (const pair of pairs) {
+          const names = { identifier: '번호·문항명 충돌', opposite: '반대 조건 명시', condition: '기간·개수·조건 변경', 'identity-required': '명시적 식별자 확인 필요' };
+          comparison.append(el('p', '지원서 질문: ' + pair.targetQuestion),
+            el('p', '차이: ' + pair.difference + (pair.conflicts.length ? ' · ' + pair.conflicts.map(c => names[c] || c).join(' · ') : '')));
+        }
+      };
+      select.addEventListener('change', () => { explicit.add(row.candidate.key); showComparison(); });
+      showComparison();
       const label = el('label', null, 'jsl-gpt-label');
       label.append(el('span', '대상 문항'), select);
-      item.append(label); selects.push([row.candidate.key, select]); entry.choices.append(item);
+      item.append(label, comparison); selects.push([row.candidate.key, select]); entry.choices.append(item);
       // 두 줄 안에 다 보이면 펼칠 것이 없다.
       requestAnimationFrame(() => { if (preview.scrollHeight <= preview.clientHeight + 1) more.hidden = true; });
     }
     entry.choices.append(button('선택한 문항에 적용', () => task(entry, async () => {
       if (selects.some(([, select]) => !select.value)) throw Error('각 답변의 대상 문항 또는 제외를 선택해 주세요.');
-      await apply(entry, tabId, Object.fromEntries(selects.map(([key, s]) => [key, s.value])), expected);
+      await apply(entry, tabId, Object.fromEntries(selects.filter(([key]) => explicit.has(key)).map(([key, s]) => [key, s.value])), expected);
     }), 'jsl-gpt-primary'));
   }
   async function apply(entry, tabId, choices = {}, expected) {
@@ -184,6 +204,7 @@
     if (applied.error) setStatus(entry, 'attn', applied.error);
     else if (applied.headline) setStatus(entry, applied.applied ? 'ok' : 'attn', applied.headline, applied.detail);
     else setStatus(entry, 'attn', applied.status || '입력 결과 확인 불가', '지원서에서 현재 내용을 확인해 주세요.');
+    if (applied.memoryWarning) { entry.statusSub.textContent += ' ' + applied.memoryWarning; entry.statusSub.hidden = false; }
   }
   function attach(message, turn, body) {
     const panel = el('div'); panel.dataset.jslGpt = 'true';
@@ -228,8 +249,14 @@
       setStatus(entry, 'ok', '이 대화의 연결을 해제했습니다.');
     }), 'jsl-gpt-quiet');
     entry.unlink.setAttribute('aria-label', '연결 해제');
+    entry.forget = button('대응 기억 삭제', () => task(entry, async () => {
+      const info = await send(entry, 'gpt:info');
+      await send(entry, 'gpt:forget-mappings', { revision: info.link?.revision });
+      entry.choices.replaceChildren();
+      setStatus(entry, 'ok', '이 대화의 대응 기억을 삭제했습니다.');
+    }), 'jsl-gpt-quiet');
     const actions = el('div', null, 'jsl-gpt-actions');
-    actions.append(button('자소설에 적용', () => task(entry, () => apply(entry)), 'jsl-gpt-primary'), entry.connected, entry.change, entry.unlink);
+    actions.append(button('자소설에 적용', () => task(entry, () => apply(entry)), 'jsl-gpt-primary'), entry.connected, entry.change, entry.unlink, entry.forget);
     panel.append(actions, entry.status, entry.choices);
     // article 전체가 아니라 markdown과 같은 부모/폭에 둔다.
     if (body === message) message.append(panel); else body.after(panel);

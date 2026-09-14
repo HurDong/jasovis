@@ -58,6 +58,17 @@ const block = (index, overrides = {}) => F.block(index + 1, { heading: '문항 '
     assert.deepEqual(errors, []);
     console.log('PASS: recommendation never preselects/writes, manual confirmation works, 390px layout, no save or page errors');
 
+    await replace(block(1, { question: '[700자] ' + F.compoundPairs[1].main.replace('전문 분야', '전문 영역'), answer: '기억으로 적용한 가상 답변' }));
+    await apply(); await status('문항 2 입력 확인');
+    assert.equal(await gpt.getByRole('combobox').count(), 0);
+    assert.equal((await answers())[1], '기억으로 적용한 가상 답변');
+    await gpt.getByRole('button', { name: '대응 기억 삭제', exact: true }).click(); await status('대응 기억을 삭제');
+    await replace(block(1, { question: F.compoundPairs[1].main.replace('전문 분야', '전문 영역'), answer: '삭제 후에는 선택 필요' }));
+    await apply(); await status('자동으로 맞추지 못');
+    assert.equal(await gpt.getByRole('combobox').inputValue(), '');
+    assert.equal((await answers())[1], '기억으로 적용한 가상 답변');
+    console.log('PASS: confirmed mapping survives display variation; delete restores unselected mapping, no extra write');
+
     await gpt.getByRole('button', { name: '연결 해제', exact: true }).click(); await status('연결을 해제');
     await target.evaluate(qnas => { model.qnas = qnas; model.currentQnaIndex = 0; }, F.wrappedQnas);
     await replace(F.wrappedPairs.map((p, i) => F.block(i + 1, { question: p.response, answer: p.answer, language: 'text' })).join(''));
@@ -72,7 +83,7 @@ const block = (index, overrides = {}) => F.block(index + 1, { heading: '문항 '
     console.log('PASS: parenthesized notice omission, NBSP and nested parentheses, four exact MV3 writes without mapping or save');
     await gpt.getByRole('button', { name: '연결 해제', exact: true }).click(); await status('연결을 해제');
     await target.evaluate(qnas => { model.qnas = qnas; model.currentQnaIndex = 0; }, F.languageQnas);
-    await replace(F.languagePairs.map((p, i) => F.block(i + 1, { question: p.response, answer: p.answer, language: 'text' })).join(''));
+    await replace(F.languagePairs.map((p, i) => F.block(i + 1, { question: '[700자] ' + p.response + '\n700자 이내 / 영문 1400자', answer: p.answer, language: 'text' })).join(''));
     await apply(); await status('연결할 지원서를 선택');
     await gpt.locator('[data-jsl-gpt] button').filter({ hasText: '/ 탭' }).click();
     await status('문항 1, 2, 3, 4 입력 확인');

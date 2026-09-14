@@ -77,15 +77,10 @@ ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하고, 현재 �
 6. 번호/질문 충돌·중복 후보는 수동 선택/제외로 해결한다. 질문 끝의 분량 표기·연속 공백·문장부호와 해당 문항 번호에 일치하는 질문 앞 번호 표기는 비교 시 정리하지만 답변 원문은 바꾸지 않는다.
 7. 입력 직전에 응답 지문·연결 revision·대상 탭/문서·문항·기존 답변을 확인한다. 입력 후 모델을 다시 읽어 반영 여부를 표시한다.
 
-엄격 비교에 실패하면 번호가 있는 응답에 한해 긴 본 질문과 작성 지침을 나눠 추가 비교한다.
-`detailedQuestion`/`detailedMatch`가 처리하는 제한된 예시 생략·띄어쓰기 규칙은 SPEC을 따른다. 유사도 점수나 답변 순서로 추정하지 않는다.
+`gpt-protocol.js`의 `analyzeQuestion`을 GPT와 지원서 양쪽에 적용한다. 원문과 UTF-16 구간, 실제 ID·편집기 순번·명시적 접두사, 분량·선택 예시·조건·미분류 구간을 반환한다. `compareQuestion`은 모든 대상에 대해 근거·충돌·불확실성·추천 점수를 반환하며 `map`은 유일성과 응답 중복을 검사한다.
+기존 `normalizeQuestion`은 연결 비교와 분량 문법 검증에 유지한다. `detailedQuestion`은 기존 긴 지침의 한쪽 예시 생략 호환 경로다. `questionKey`는 제한된 구두점만 정리하고 의미 기호를 보존한다. 분석기는 같은 프로토콜 파일에 두므로 manifest와 worker의 기존 주입 순서를 유지한다.
 
-복합 문항명(`1-2`)은 후보의 `label`로 보존하며 입력칸 정수 `number`와 구분한다.
-`labeledQuestion`/`questionParts`는 비교 시에만 명시적 문항명과 안내를 분리한다.
-`normalizeQuestion`은 끝의 균형 잡힌 그룹 내용이 수치·단위·언어별 분량 제한으로만 구성되는지 검사한다. 중첩/연속 괄호·대괄호·전각 표기는 경계이며, 모르는 작성 조건은 보존한다.
-번호 또는 문항명·본 질문·대상 유일성이 확인되면 표시된 안내의 생략과 제한된 종결 표현 차이를 허용한다.
-문자 유사도는 `suggestion`을 표시하는 데만 사용하고 `target`이나 입력 패킷으로 승격하지 않는다.
-새 규칙의 경계와 실행 검증은 `tests/gpt/matching.test.cjs`, `matching.browser.cjs`에 있다.
+`gpt-background.js`는 `gpt-confirmed-mappings`를 직렬 갱신한다. 수동 선택 후 검증된 문항만 저장하며 대화·지원서·revision·문항 원문 구성의 SHA-256·분석기 버전을 범위로 사용한다. 최근 확인 순 256개/30일 제한이며 준비·연결 변경·삭제 때 정리한다. 준비 뒤 전체 문항 구성도 원문 지문으로 재검증한다. `gpt:forget-mappings`는 현재 대화 기억과 아직 적용되지 않은 준비 기록의 학습 항목을 비운다.
 
 연결 변경은 대상을 바꾸기만 하고 해제는 해당 대화의 연결만 지운다. 둘 다 기존 자소서를 수정/삭제하지 않는다.
 연결은 다음 적용에서 대상 선택을 줄이는 편의 기능이며 자동 동기화가 아니다.
@@ -124,7 +119,7 @@ Chrome `chrome://extensions`에서 개발자 모드를 켜고 저장소 루트�
 
 ```sh
 node --test tests/gpt/protocol.test.cjs tests/gpt/background.test.cjs tests/chat-tools/main.test.cjs
-node --test tests/gpt/matching.test.cjs
+node --test tests/gpt/matching.test.cjs tests/gpt/engine.test.cjs
 node --test tests/gpt/feedback.test.cjs tests/gpt/feedback-background.test.cjs
 node --test tests/relay/source.test.cjs tests/list-cards/menu.test.cjs
 node --test tests/relay/profile.test.cjs

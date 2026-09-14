@@ -1,8 +1,8 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const vm = require('node:vm'), fs = require('node:fs'), crypto = require('node:crypto');
 const P = require('../../src/core/gpt-protocol');
-function fixture() {
-  const storage = {}, state = { resume: { id: 55, title: '예시기업' }, qnas: [{ id: 91, number: 1, question: '지원 동기', answer: '기존' }] };
+function fixture(storage = {}) {
+  const state = { resume: { id: 55, title: '예시기업' }, qnas: [{ id: 91, number: 1, question: '지원 동기', answer: '기존' }] };
   const targetTabs = [{ id: 2, url: 'https://jasoseol.com/resume/55', title: '예시기업', windowId: 1 }];
   const flags = { sourceValid: true, documentKey: 'doc1', writes: 0, focusedTabs: [], focusedWindows: [], beforeWrite: null, reads: 0, beforeRead: null, undos: 0 };
   let listener;
@@ -20,7 +20,7 @@ function fixture() {
         if (flags.beforeWrite) await flags.beforeWrite();
         P.validate(message.packet, state, true); flags.writes++;
         state.qnas[0].answer = message.packet.answers[0].text;
-        return { applied: true, status: '입력 확인', verified: message.packet.answers.map(a => a.number) };
+        return { applied: true, status: '입력 확인', verified: flags.unverified ? [] : message.packet.answers.map(a => a.number) };
       }
       if (message.type === 'gpt:undo') {
         flags.undos++;
@@ -35,7 +35,7 @@ function fixture() {
       }
     }
   }, windows: { update: async (id, changes) => { flags.focusedWindows.push({id, ...changes}); } }, runtime: { onMessage: { addListener: fn => { if (!listener) listener = fn; } } } };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../../src/core/gpt-background.js'), 'utf8'), { chrome, JSLGpt: P, importScripts() {}, URL, crypto, console });
+  vm.runInNewContext(fs.readFileSync(require.resolve('../../src/core/gpt-background.js'), 'utf8'), { chrome, JSLGpt: P, importScripts() {}, URL, crypto, TextEncoder, console });
   const base = { conversation: 'chat1', response: 'response1', fingerprint: 'hash1' };
   const send = (type, extra = {}, sender = {}) => new Promise(resolve => listener({ ...base, type, ...extra }, { frameId: 0, tab: { id: 1 }, url: 'https://chatgpt.com/c/chat1', ...sender }, resolve));
   const connect = async (extra = {}) => (await send('gpt:connect', { tabId: 2, ...extra })).link;
@@ -149,4 +149,68 @@ test('확인 대상 소실·페이지 이동·연결 변경·응답 변경은 �
     assert.equal(f.flags.focusedTabs.length, 0, kind);
     assert.equal(f.flags.writes, 1, kind);
   }
+});
+
+test('수동 선택은 확인된 입력 후에만 기억하고 같은 표현을 재사용·삭제한다', async()=>{
+  const f=fixture(),link=await f.connect();
+  const candidates=[{key:'0',number:1,question:'지원한 계기',text:'비공개 가상 답변'}];
+  assert.ok((await f.prepare(link,{candidates})).mapping);
+  const p=await f.prepare(link,{candidates,choices:{0:'91'}});
+  assert.deepEqual(f.storage['gpt-confirmed-mappings'],[]);
+  await f.send('gpt:apply',{revision:link.revision,token:p.token});
+  assert.equal(f.storage['gpt-confirmed-mappings'].length,1);
+  assert.equal(JSON.stringify(f.storage['gpt-confirmed-mappings']).includes('비공개 가상 답변'),false);
+  assert.ok((await f.prepare(link,{candidates})).token);
+  await f.send('gpt:forget-mappings',{revision:link.revision});
+  assert.ok((await f.prepare(link,{candidates})).mapping);
+});
+test('자동 대응·미확인 입력은 학습하지 않고 연결·문항·버전 변경은 기억을 폐기',async()=>{
+  const f=fixture(),link=await f.connect(),p=await f.prepare(link);
+  await f.send('gpt:apply',{revision:link.revision,token:p.token});
+  assert.deepEqual(f.storage['gpt-confirmed-mappings'],[]);
+  const candidates=[{key:'0',number:1,question:'지원한 계기',text:'가상 답변'}];
+  async function learn(){const p=await f.prepare(link,{candidates,choices:{0:'91'}}); await f.send('gpt:apply',{revision:link.revision,token:p.token});}
+  await learn(); f.storage['gpt-confirmed-mappings'][0].version=-1;
+  assert.ok((await f.prepare(link,{candidates})).mapping);
+  await learn(); f.state.qnas[0].question+=' (700자)';
+  assert.ok((await f.prepare(link,{candidates})).mapping);
+  await learn(); await f.connect(); assert.deepEqual(f.storage['gpt-confirmed-mappings'],[]);
+});
+test('상한·기한 정리와 준비 후 삭제, 미확인 결과를 기억하지 않음',async()=>{
+  const f=fixture(),link=await f.connect();
+  f.storage['gpt-confirmed-mappings']=Array.from({length:270},(_,i)=>({version:P.ANALYZER_VERSION,updated:Date.now(),conversation:'other'+i,expression:'가상 표현',targets:['91']}));
+  await f.prepare(link); assert.equal(f.storage['gpt-confirmed-mappings'].length,256);
+  f.storage['gpt-confirmed-mappings'].forEach(r=>r.updated=0); await f.prepare(link); assert.equal(f.storage['gpt-confirmed-mappings'].length,0);
+  const candidates=[{key:'0',number:1,question:'지원한 계기',text:'가상 답변'}];
+  const p=await f.prepare(link,{candidates,choices:{0:'91'}});
+  await f.send('gpt:forget-mappings',{revision:link.revision});
+  await f.send('gpt:apply',{revision:link.revision,token:p.token});
+  assert.deepEqual(f.storage['gpt-confirmed-mappings'],[]);
+  const p2=await f.prepare(link,{candidates,choices:{0:'91'}}); f.state.qnas[0].answer='직접 변경';
+  assert.equal((await f.send('gpt:apply',{revision:link.revision,token:p2.token})).ok,false);
+  assert.deepEqual(f.storage['gpt-confirmed-mappings'],[]);
+});
+
+
+test('작업자 재시작 후 저장 범위 복구와 검증되지 않은 입력의 학습 거부',async()=>{
+  const f=fixture(),link=await f.connect();
+  const candidates=[{key:'0',number:1,question:'지원한 계기',text:'가상 답변'}];
+  f.flags.unverified=true;
+  let p=await f.prepare(link,{candidates,choices:{0:'91'}});
+  await f.send('gpt:apply',{revision:link.revision,token:p.token});
+  assert.deepEqual(f.storage['gpt-confirmed-mappings'],[]);
+  f.flags.unverified=false;
+  p=await f.prepare(link,{candidates,choices:{0:'91'}});
+  await f.send('gpt:apply',{revision:link.revision,token:p.token});
+  const restarted=fixture(f.storage);
+  assert.ok((await restarted.prepare(link,{candidates})).token);
+  const other=await restarted.connect({conversation:'chat2'});
+  assert.ok((await restarted.prepare(other,{conversation:'chat2',candidates})).mapping);
+});
+test('준비 뒤 선택하지 않은 문항의 표시 분량 변경도 원문 구성 지문으로 거부',async()=>{
+  const f=fixture(); f.state.qnas.push({id:92,number:2,question:'추가 질문',answer:''});
+  const link=await f.connect(),p=await f.prepare(link);
+  f.state.qnas[1].question+=' (700자)';
+  const result=await f.send('gpt:apply',{revision:link.revision,token:p.token});
+  assert.equal(result.ok,false); assert.match(result.error,/문항 구성/); assert.equal(f.flags.writes,0);
 });

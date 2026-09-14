@@ -52,52 +52,27 @@
     return s.replace(/\s+/g, ' ').trim();
   }
   function questionKey(text, number = null) {
-    // 대응 비교 전용 키. 문장부호·기호는 지우지 않고 공백으로 바꿔, GPT가 마침표나 괄호 간격을
+    // 기존 긴 지침의 호환 키. 제한된 구두점만 공백으로 바꿔, GPT가 마침표나 괄호 간격을
     // 바꿔 적어도 같은 문항으로 본다. 공백 자체는 없애지 않는다 ('아버지 가방'과 '아버지가 방'은 다르다).
     let s = normalizeQuestion(text);
     // 번호 메타와 일치하는 명시적 접두사만 비교에서 제외한다. 소수·연도·본문 숫자는 보존한다.
     const prefix = /^(?:(?:문항\s*|Q\s*)(\d+)(?:\s*[:：.)]\s*|\s+)|(\d+)\s*번(?:\s*문항)?(?:\s*[:：.)]\s*|\s+)|\((\d+)\)\s*|\[(\d+)\]\s*|(\d+)[.)]\s+)(?=\S)/i.exec(s);
     if (prefix && Number(prefix.slice(1).find(x => x !== undefined)) === number) s = s.slice(prefix[0].length);
-    return s.replace(/[\p{P}\p{S}ㆍ]/gu, ' ').replace(/\s+/g, ' ').trim();
+    return s.replace(/[.!?。()（）\[\]:：,，]/g, ' ').replace(/\s+/g, ' ').trim();
   }
   // 공고의 '1-2'는 편집기의 두 번째 입력칸 번호와 별개다.
   const compound = '[1-9]\\d{0,2}(?:\\s*[-–]\\s*[1-9]\\d{0,2}){1,3}';
   const compoundHeading = new RegExp('^(?:문항\\s*(' + compound + ')|(' + compound + ')\\s*번\\s*(?:문항)?|Q\\s*(' + compound + '))(?=\\s|[.:：)]|$)', 'i');
-  const compoundPrefix = new RegExp('^(?:\\[\\s*(?:문항\\s*|Q\\s*)?(' + compound + ')\\s*\\]|(?:문항\\s*|Q\\s*)(' + compound + ')(?:\\s*[:：.)]\\s*|\\s+))\\s*', 'i');
   const cleanLabel = value => value.replace(/\s/g, '').replace(/–/g, '-');
-  function labeledQuestion(text) {
-    const s = normalizeQuestion(text), match = compoundPrefix.exec(s);
-    return { label: match ? cleanLabel(match[1] || match[2]) : null, text: match ? s.slice(match[0].length) : s };
-  }
   function questionHeading(text) {
     const s = text.trim(), sub = compoundHeading.exec(s);
+    const circled = /^([①-⑳])\s*(?=\S)/.exec(s);
+    if (circled) return { number: circled[1].charCodeAt(0) - 0x2460 + 1, length: circled[0].length };
     if (sub) return { number: null, label: cleanLabel(sub[1] || sub[2] || sub[3]), length: sub[0].length };
     // 불완전한 복합 번호를 앞자리 정수로 잘라 읽지 않는다.
     const single = /^(?:문항\s*(\d+)|(\d+)\s*번\s*(?:문항)?|Q\s*(\d+))(?=\s|[.:：)\-]|$)/i.exec(s);
     if (!single || /^\s*[-–]\s*\d/.test(s.slice(single[0].length))) return null;
     return { number: Number(single[1] || single[2] || single[3]), length: single[0].length };
-  }
-  function questionParts(text, number) {
-    // 문장 뒤에 명시적으로 표시된 안내만 분리한다. 임의의 두 번째 문장은 보존한다.
-    let marked = /([.!?。]\s*)([（(]\s*)?(?:\*{1,2}|※|•)\s*/.exec(text);
-    if (marked?.[2]) {
-      // '(※ 안내)'는 끝까지 하나의 균형 잡힌 괄호여야 한다. 뒤의 별도 요구를 버리지 않는다.
-      const tail = text.slice(marked.index + marked[1].length).trimEnd(), stack = [];
-      for (let i = 0; i < tail.length; i++) {
-        const char = tail[i];
-        if (char === '(' || char === '（') stack.push(char);
-        if (char === ')' || char === '）') {
-          if (stack.pop() !== (char === ')' ? '(' : '（') || (!stack.length && i < tail.length - 1)) { marked = null; break; }
-        }
-      }
-      if (stack.length) marked = null;
-    }
-    const main = marked ? text.slice(0, marked.index + marked[1].length) : text;
-    const canonical = value => questionKey(value, number).replace(/(서술|기술|작성|설명)(?:하시오|하십시오|해\s*주세요)/g, '$1');
-    return { main: canonical(main), detail: marked ? questionKey(text.slice(marked.index + marked[0].length)) : '' };
-  }
-  function structuralMatch(a, b) {
-    return a.main.length >= 12 && a.main === b.main && (!a.detail || !b.detail || a.detail === b.detail);
   }
   function similarity(a, b) {
     // 추천 전용 문자 bigram Dice. 긴 질문에도 비용이 선형이며 점수만으로 쓰지 않는다.
@@ -143,19 +118,22 @@
   function parse(blocks) {
     const result = [];
     let context = null;
-    for (const block of blocks) {
+    for (const [blockIndex, block] of blocks.entries()) {
       if (block.type === 'boundary') { context = null; continue; }
       if (block.type === 'code') {
         if (!context || !block.text.trim()) continue;
         if (/^\s*(?:#\s*)?(?:작업|저장소|구현 목표|Codex|AGENTS\.md)\s*[:：\n]/i.test(block.text)) continue;
-        result.push({ key: String(result.length), number: context.number, ...(context.label ? { label: context.label } : {}), question: context.question, text: block.text });
+        result.push({ key: String(result.length), number: context.number, ...(context.label ? { label: context.label } : {}), question: context.question, text: block.text, provenance: { heading: context.start, question: context.questionBlock ?? null, code: blockIndex, listNumber: context.listNumber ?? null } });
         continue;
       }
       const text = block.text.trim();
-      const heading = questionHeading(text);
+      if (/^(?:검수|전략표|출처|다른 문항 설명)\s*[:：]/.test(text)) { context = null; continue; }
+      const listing = /^(\d+)[.)]\s+(?=(?:문항|Q)\s*\d)/i.exec(text);
+      const headingText = listing ? text.slice(listing[0].length) : text;
+      const heading = questionHeading(headingText);
       if (heading && (block.type === 'heading' || !text.includes('\n'))) {
-        context = { number: heading.number, label: heading.label, question: '', level: block.level || 3 };
-        const inline = text.slice(heading.length).match(/^\s*[:：]\s*(.+)$/);
+        context = { number: heading.number, label: heading.label, question: '', level: block.level || 3, start: blockIndex, listNumber: listing ? Number(listing[1]) : null };
+        const inline = headingText.slice(heading.length).match(/^\s*[:：]\s*(.+)$/);
         if (inline && !/^(수정|개선|최종|완성|초안)/.test(inline[1])) context.question = inline[1];
         continue;
       }
@@ -163,6 +141,7 @@
       const q = /^(?:[-•]\s*)?(?:문항\s*원문|질문(?:\s*원문)?)\s*[:：]\s*([^]*?)\s*$/.exec(text);
       if (q && q[1]) {
         if (!context) context = { number: null, question: '', level: block.level || 3 };
+        context.questionBlock = blockIndex;
         context.question = q[1].split(/\n\s*(?:[-•]\s*)?(?:글자\s*수|선택한 소재|소재|작성 전략|실제 글자|문항 ID)\s*[:：]/)[0].trim();
       }
     }
@@ -191,44 +170,164 @@
       keys.add(c.key);
     }
   }
-  function map(candidates, state, choices = {}) {
+  const ANALYZER_VERSION = 1;
+  // Shared, lossless analysis. Offsets always address the untouched question, not its key.
+  function analyzeQuestion(value, meta = {}) {
+    const raw = String(value || ''), spans = [], removed = [];
+    const add = (kind, start, end, reason) => {
+      const span = { kind, start, end, raw: raw.slice(start, end), reason };
+      if (kind === 'limit') {
+        span.amounts = [...span.raw.matchAll(/(\d[\d,]*)\s*(자|바이트|bytes?)/gi)].map(m => ({ value: Number(m[1].replace(/,/g, '')), unit: m[2] }));
+        span.languages = span.raw.match(/국문|한글|영문|영어/g) || [];
+        span.whitespace = span.raw.match(/공백\s*(포함|제외)/)?.[1] || null;
+      }
+      spans.push(span);
+      if (['limit', 'identifier', 'optional'].includes(kind)) removed.push([start, end]);
+    };
+    // Only complete groups and complete lines can prove an independent amount annotation.
+    const stack = [], groups = [], close = { ')': '(', '）': '（', ']': '[', '］': '［' };
+    let malformed = false;
+    for (let i = 0; i < raw.length; i++) {
+      if ('(（[［'.includes(raw[i])) stack.push(i);
+      else if (close[raw[i]]) {
+        if (!stack.length) continue; // a heading such as 2) is handled below
+        const start = stack.pop();
+        if (raw[start] !== close[raw[i]]) malformed = true;
+        if (!stack.length) groups.push([start, i + 1]);
+      }
+    }
+    malformed ||= stack.length > 0;
+    const isLimit = text => {
+      const flat = text.replace(/[()（）\[\]［］]/g, ' ').replace(/^\s*(?:※|분량\s*[:：]|글자\s*수\s*(?:제한)?\s*[:：])\s*/, '').trim();
+      return !!flat && normalizeQuestion('LIMIT (' + flat + ')') === 'LIMIT';
+    };
+    if (!malformed) for (const [start, end] of groups) {
+      const text = raw.slice(start, end);
+      if (isLimit(text)) add('limit', start, end, '독립된 수치·단위·언어별 분량 안내');
+      else if (/^[(（[［]\s*(?:※\s*)?(?:예시\s*[:：]|예\s*[:：])/.test(text) && !/필수|반드시|금지|제외|최근|\d+\s*(?:년|가지|개)/.test(text)) add('optional', start, end, '명시적 선택 예시');
+      else if (/사용해도 됩니다|선택 사항|선택사항/.test(text) && !/필수|반드시|금지/.test(text)) add('optional', start, end, '명시적 선택 허용');
+      else add('unknown', start, end, '괄호만으로 생략 가능 여부를 판정하지 않음');
+    }
+    let offset = 0;
+    for (const line of raw.split('\n')) {
+      if (!malformed && isLimit(line) && !removed.some(([a, b]) => a <= offset && b >= offset + line.length)) add('limit', offset, offset + line.length, '독립된 분량 안내 줄');
+      offset += line.length + 1;
+    }
+    let text;
+    // Offsets are UTF-16, as are browser strings and selection ranges.
+    const masked = raw.split('').map((ch, i) => removed.some(([a, b]) => i >= a && i < b) ? ' ' : ch).join('');
+    let contentOffset = masked.length - masked.trimStart().length;
+    text = masked.trim();
+    // Fullwidth conversion is confined to the leading identifier region.
+    text = text.replace(/^[（［(\[]?\s*(?:(?:문항|Q)\s*)?[０-９]+(?:[．.：:）)］\]\s])/, part => part.replace(/[０-９]/g, c => String(c.charCodeAt(0) - 0xff10)).replace(/[（［．：）］]/g, c => ({'（':'(', '［':'[', '．':'.', '：':':', '）':')', '］':']'}[c])));
+    const numbered = /^(?:\[\s*(?:문항\s*|Q\s*)?([1-9]\d{0,2}(?:\s*[-–]\s*[1-9]\d{0,2}){1,3})\s*\]|(?:문항\s*|Q\s*)([1-9]\d{0,2}(?:\s*[-–]\s*[1-9]\d{0,2}){0,3})\s*[:：.)]?|([1-9]\d{0,2})\s*번(?:\s*문항)?\s*[:：.)]?|\(([1-9]\d{0,2})\)|\[([1-9]\d{0,2})\]|([1-9]\d{0,2})[.)](?=\s)|([①-⑳]))\s*/i.exec(text);
+    let prefix = null;
+    if (numbered) {
+      prefix = numbered[7] ? String(numbered[7].charCodeAt(0) - 0x2460 + 1) : cleanLabel(numbered.slice(1, 7).find(Boolean));
+      const start = contentOffset;
+      if (start >= 0) add('identifier', start, start + numbered[0].length, '질문 시작의 명시적 문항 표기');
+      text = text.slice(numbered[0].length);
+      contentOffset += numbered[0].length;
+    }
+    const canonical = s => s.replace(/([.!?。])\s*(?:※|\*{1,2}|•)\s*/g, '$1 ').replace(/\s*([（(])/g, ' $1').replace(/\u00a0/g, ' ').replace(/(서술|기술|작성|설명)(?:하시오|하십시오|해\s*주세요)/g, '$1')
+      .replace(/([.!?。])(?=\s|[（(]|$)/g, ' ').replace(/\s+/g, ' ').trim();
+    const key = canonical(text);
+    const marked = /[.!?。]\s*(?:[（(]\s*)?(?:※|\*{1,2}|•)\s*/.exec(text);
+    const main = canonical(marked ? text.slice(0, marked.index) : text);
+    const detail = marked ? text.slice(marked.index + marked[0].length) : '';
+    // Known instruction vocabulary permits omission only with a unique core + identity.
+    const knownDetail = !!detail && !malformed && /작성|기술|설명|포함|제외|참조|가능/.test(detail) &&
+      !/[)）]\s+[^\s)）]/.test(detail);
+    const constraints = [];
+    for (const m of text.matchAll(/성공|실패|포함|제외|금지|필수|반드시|장점|단점|강점|약점|찬성|반대|않[는은을아]|못[한하했]|아닌|없이|최근\s*\d+\s*년|\d+\s*(?:년|개월|가지|개)|(?:한|두|세)\s*가지/g)) {
+      const start = contentOffset + m.index;
+      constraints.push(m[0].replace(/\s/g, ''));
+      if (start >= 0) add('constraint', start, start + m[0].length, '조건·기간·개수·부정 신호 보존');
+    }
+    for (const m of raw.matchAll(/[^.!?。\n()（）]{1,60}(?:대상으로|에 한하여|필수|반드시)[^.!?。\n()（）]*/g)) {
+      spans.push({ kind: 'requirement', start: m.index, end: m.index + m[0].length, raw: m[0], reason: '명시적인 대상·필수 조건 문구 보존' });
+    }
+    // Unclassified material remains in key; identical unknowns are still exact matches.
+    spans.push({ kind: 'body', start: 0, end: raw.length, raw, reason: '원문 보존; 별도 분류 구간을 제외한 비교 본문', text });
+    if (malformed) spans.push({ kind: 'unknown', start: 0, end: raw.length, raw, reason: '불완전한 괄호 구조' });
+    return { version: ANALYZER_VERSION, raw, id: meta.id || null, editorNumber: meta.editorNumber ?? null,
+      label: meta.label || (prefix?.includes('-') ? prefix : null), prefix, listNumber: meta.listNumber ?? null,
+      key, main, detail, knownDetail, constraints, spans, malformed };
+  }
+  function compareQuestion(a, b) {
+    const conflicts = [], uncertainty = [], evidence = [];
+    const label = a.label, number = a.editorNumber;
+    const identity = label ? label === b.label : (number ?? (a.prefix && !a.prefix.includes('-') ? Number(a.prefix) : null)) === b.editorNumber;
+    if ((label && label !== b.label) || (number != null && number !== b.editorNumber) ||
+        (a.prefix && !a.prefix.includes('-') && Number(a.prefix) !== b.editorNumber) ||
+        (a.label && a.prefix?.includes('-') && a.label !== a.prefix) ||
+        (b.prefix && !b.prefix.includes('-') && Number(b.prefix) !== b.editorNumber)) conflicts.push('identifier');
+    if (identity) evidence.push('identifier');
+    const exact = !!a.key && a.key === b.key, sameMain = !!a.main && a.main === b.main;
+    const opposite = [['성공', '실패'], ['포함', '제외'], ['장점', '단점'], ['강점', '약점'], ['찬성', '반대']];
+    if (!exact) {
+      if (opposite.some(([x, y]) => (a.constraints.includes(x) && b.constraints.includes(y)) || (a.constraints.includes(y) && b.constraints.includes(x)))) conflicts.push('opposite');
+      const signals = c => c.constraints.filter(x => /않|못|아닌|없이|\d|가지/.test(x));
+      const as = signals(a), bs = signals(b);
+      if (as.length && bs.length && JSON.stringify(as) !== JSON.stringify(bs)) conflicts.push('condition');
+      else if (JSON.stringify(as) !== JSON.stringify(bs)) uncertainty.push('조건·부정 표현의 생략 또는 변경');
+    }
+    const detailMatch = detailedMatch(detailedQuestion(a.raw, a.editorNumber), detailedQuestion(b.raw, b.editorNumber));
+    const omitted = identity && sameMain && ((!a.detail && b.knownDetail) || (!b.detail && a.knownDetail));
+    if (exact || detailMatch || omitted) evidence.push('question');
+    if (detailMatch && !identity) conflicts.push('identity-required');
+    if (omitted) uncertainty.push('작성 안내 생략: 본 질문과 명시적 식별자 확인');
+    if (!exact && !omitted && !detailMatch) uncertainty.push('질문 표현 차이');
+    // A one-sided negative is not a proven opposite, but must not be recommended.
+    const score = conflicts.length || uncertainty.some(x => x.startsWith('조건')) ? 0 : similarity(a.main, b.main);
+    return { id: b.id, identity, exact, sameMain, evidence, conflicts, uncertainty, score,
+      sourceQuestion: a.raw, targetQuestion: b.raw, difference: exact ? '허용된 표시 차이 또는 원문 일치' : uncertainty.join(' · ') || '요구 내용 차이' };
+  }
+  function memoryExpression(candidate) {
+    if (!candidate.question?.trim()) return null;
+    const a = analyzeQuestion(candidate.question);
+    return a.key && a.key.length <= 4000 ? a.key : null;
+  }
+  function questionFingerprint(state) {
+    return JSON.stringify(metadata(state).qnas.map(q => [q.id, q.number, q.question]).sort((a, b) => a[0].localeCompare(b[0])));
+  }
+  function map(candidates, state, choices = {}, memories = []) {
     candidatesValid(candidates);
     const { qnas } = metadata(state);
-    const described = qnas.map(q => ({ ...q, ...labeledQuestion(q.question) }));
+    const described = qnas.map(q => ({ ...q, analysis: analyzeQuestion(q.question, { id: q.id, editorNumber: q.number }) }));
     const rows = candidates.map(candidate => {
-      const source = labeledQuestion(candidate.question), label = candidate.label || source.label;
-      const conflict = !!(candidate.label && source.label && candidate.label !== source.label);
-      const identities = label ? described.filter(q => q.label === label) : described.filter(q => q.number === candidate.number);
-      const byIdentity = identities.length === 1 ? identities[0] : null;
-      const compatible = q => {
-        if (conflict) return false;
-        if (label) return byIdentity?.id === q.id && (candidate.number === null || candidate.number === q.number);
-        return candidate.number === null || byIdentity?.id === q.id;
-      };
-      let byQuestion = candidate.question ? described.filter(q => {
-        const wanted = questionKey(source.text, candidate.number ?? q.number);
-        return wanted && questionKey(q.text, q.number) === wanted;
-      }) : [];
-      if (!byQuestion.length && candidate.question && byIdentity) {
-        const detail = detailedQuestion(source.text, candidate.number);
-        byQuestion = described.filter(q => detailedMatch(detail, detailedQuestion(q.text, q.number)));
-        if (!byQuestion.length) byQuestion = described.filter(q => structuralMatch(questionParts(source.text, candidate.number), questionParts(q.text, q.number)));
+      const analysis = analyzeQuestion(candidate.question, { label: candidate.label, editorNumber: candidate.number, listNumber: candidate.provenance?.listNumber });
+      const comparisons = described.map(q => compareQuestion(analysis, q.analysis));
+      const matches = comparisons.filter(c => c.evidence.includes('question'));
+      const eligible = comparisons.filter(c => c.evidence.includes('question') && !c.conflicts.length);
+      let target = null, reason = '', evidence = [];
+      if (matches.length === 1 && eligible.length === 1) { target = eligible[0].id; evidence = eligible[0].evidence; }
+      if (!candidate.question.trim()) {
+        const identities = comparisons.filter(c => c.identity && !c.conflicts.length);
+        if (identities.length === 1) { target = identities[0].id; evidence = ['identifier']; }
       }
-      let target = null, reason = '';
-      if (candidate.question) {
-        if (byQuestion.length === 1 && compatible(byQuestion[0])) target = byQuestion[0];
-        else reason = byQuestion.length > 1 ? '같은 질문이 여러 문항에 있습니다.' : '번호와 질문을 확인해 주세요.';
-      } else if (byIdentity && !conflict) target = byIdentity;
-      else reason = '대상 문항을 선택해 주세요.';
-      let suggestion = null;
-      if (!target && candidate.question && !conflict) {
-        const main = questionParts(source.text, candidate.number).main;
-        const ranked = described.filter(q => !label || q.label === label).map(q => ({ id: q.id,
-          score: similarity(main, questionParts(q.text, q.number).main) })).sort((a, b) => b.score - a.score);
-        // 80% / 8%p는 추천 표시 기준이다. 선택값·입력 패킷에는 사용하지 않는다.
-        if (ranked[0]?.score >= 0.8 && ranked[0].score - (ranked[1]?.score || 0) >= 0.08) suggestion = ranked[0].id;
+      if (target && described.filter(q => q.analysis.key === described.find(q => q.id === target).analysis.key || (!candidate.question && q.analysis.main === described.find(q => q.id === target).analysis.main)).length > 1) {
+        target = null; reason = '같은 질문이 여러 문항에 있습니다.';
       }
-      return { candidate, target: target?.id || null, reason, suggestion };
+      // A matching core cannot identify a target when omitted conditions distinguish two slots.
+      const competing = comparisons.filter(c => c.sameMain);
+      if (competing.length > 1 && !comparisons.some(c => c.id === target && c.exact)) target = null;
+      const expression = memoryExpression(candidate);
+      const remembered = memories.filter(m => m.expression === expression);
+      const ids = new Set(remembered.flatMap(m => m.targets));
+      const rememberedId = ids.size === 1 ? [...ids][0] : null;
+      const rememberedPair = comparisons.find(c => c.id === rememberedId);
+      if (!target && expression && rememberedPair && !rememberedPair.conflicts.length && (matches.length === 0 || (matches.length === 1 && matches[0].id === rememberedId)) && competing.length <= 1 &&
+          !described.some(q => q.id !== rememberedId && q.analysis.key === described.find(n => n.id === rememberedId).analysis.key)) {
+        target = rememberedId; evidence = ['confirmed'];
+      }
+      if (ids.size > 1) { target = null; reason = '같은 질문 표현을 서로 다른 문항에 선택한 이력이 있습니다.'; }
+      if (!target && !reason) reason = matches.length > 1 || competing.length > 1 ? '같은 질문이 여러 문항에 있습니다. 생략된 조건을 비교해 주세요.' :
+        comparisons.some(c => c.conflicts.includes('identifier') && c.evidence.includes('question')) ? '번호와 질문이 서로 다른 문항을 가리킵니다.' :
+        '질문 표현 또는 생략된 조건을 확인하고 대상 문항을 선택해 주세요.';
+      const ranked = comparisons.filter(c => !c.conflicts.length).sort((a, b) => b.score - a.score);
+      const suggestion = !target && ids.size <= 1 && ranked[0]?.score >= 0.8 && ranked[0].score - (ranked[1]?.score || 0) >= 0.08 ? ranked[0].id : null;
+      return { candidate, analysis, comparisons, target, reason, suggestion, evidence };
     });
     const duplicateIds = new Set(rows.filter(r => r.target && rows.filter(x => x.target === r.target).length > 1).map(r => r.target));
     const disputedSuggestions = new Set(rows.filter(r => r.suggestion && rows.some(other => other !== r &&
@@ -239,7 +338,7 @@
       if (Object.hasOwn(choices, r.candidate.key)) {
         const chosen = choices[r.candidate.key];
         if (chosen !== 'skip' && !qnas.some(q => q.id === chosen)) throw Error('선택한 문항이 없습니다.');
-        r.target = chosen; r.reason = '';
+        r.manual = chosen !== 'skip'; r.target = chosen; r.reason = ''; r.evidence = ['manual'];
       }
     }
     const selected = rows.filter(r => r.target && r.target !== 'skip');
@@ -267,6 +366,6 @@
     }
     return packet;
   }
-  root.JSLGpt = { conversation, normalizeQuestion, questionKey, parse, metadata, sameQuestions, map, validate };
+  root.JSLGpt = { analyzeQuestion, compareQuestion, memoryExpression, questionFingerprint, ANALYZER_VERSION, conversation, normalizeQuestion, questionKey, parse, metadata, sameQuestions, map, validate };
   if (typeof module !== 'undefined') module.exports = root.JSLGpt;
 })(globalThis);

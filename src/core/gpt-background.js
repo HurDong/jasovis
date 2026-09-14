@@ -15,6 +15,30 @@ const origin = sender => { try { return new URL(sender.url).origin; } catch { re
 const resumeId = url => { try { return new URL(url).pathname.match(/^\/resume\/(\d+)\/?$/)?.[1]; } catch { return null; } };
 const binding = async id => (await chrome.storage.local.get(key(id)))[key(id)] || null;
 const publicLink = link => link ? { resume: link.resume, revision: link.revision } : null;
+const MEMORY_KEY = 'gpt-confirmed-mappings', MEMORY_TTL = 30 * 86400000;
+let memoryQueue = Promise.resolve();
+function editMemory(fn) {
+  const operation = memoryQueue.then(async () => {
+    const saved = (await chrome.storage.local.get(MEMORY_KEY))[MEMORY_KEY];
+    const records = (Array.isArray(saved) ? saved : []).filter(r => r.version === JSLGpt.ANALYZER_VERSION &&
+      r.updated > Date.now() - MEMORY_TTL && typeof r.expression === 'string' && Array.isArray(r.targets));
+    const next = await fn(records);
+    await chrome.storage.local.set({ [MEMORY_KEY]: next.sort((a, b) => b.updated - a.updated).slice(0, 256) });
+    return next;
+  });
+  memoryQueue = operation.catch(() => {});
+  return operation;
+}
+async function memoryScope(conversation, link, state) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSLGpt.questionFingerprint(state)));
+  return { conversation, resumeId: link.resume.id, revision: link.revision, version: JSLGpt.ANALYZER_VERSION,
+    fingerprint: Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('') };
+}
+const inScope = (record, scope) => Object.keys(scope).every(k => record[k] === scope[k]);
+async function forgetMemory(conversation) {
+  await editMemory(records => records.filter(r => r.conversation !== conversation));
+  for (const pending of prepared.values()) if (pending.conversation === conversation) pending.confirmed = [];
+}
 async function targets() {
   return (await chrome.tabs.query({ url: 'https://jasoseol.com/*' })).filter(t => resumeId(t.url)).map(t =>
     ({ id: t.id, title: t.title, windowId: t.windowId, resumeId: resumeId(t.url) }));
@@ -47,10 +71,12 @@ async function handle(message, sender) {
       await source(message, sender);
       const next = { ...JSLGpt.metadata(data.state), revision: crypto.randomUUID() };
       await chrome.storage.local.set({ [key(conversation)]: next });
+      await forgetMemory(conversation);
       return { link: publicLink(next) };
     }
     if (message.type === 'gpt:unlink') {
       await chrome.storage.local.remove(key(conversation));
+      await forgetMemory(conversation);
       return { link: null };
     }
     if (message.type === 'gpt:open') {
@@ -58,6 +84,10 @@ async function handle(message, sender) {
       return { opened: (await chrome.tabs.create({ url })).id };
     }
     if (!link || link.revision !== message.revision) throw Error('지원서 연결이 변경되었습니다. 연결을 확인한 뒤 다시 적용해 주세요.');
+    if (message.type === 'gpt:forget-mappings') {
+      await forgetMemory(conversation);
+      return { forgotten: true };
+    }
     if (message.type === 'gpt:focus') {
       const target = message.target;
       if (!Number.isInteger(target?.tabId) || target.resumeId !== link.resume.id) throw Error('확인할 지원서 정보가 변경되었습니다.');
@@ -82,13 +112,18 @@ async function handle(message, sender) {
       const tab = message.tabId == null ? (tabs.length === 1 ? tabs[0] : null) : tabs.find(t => t.id === message.tabId);
       if (!tab) return { chooseTab: true, targets: tabs };
       const data = await readTarget(tab.id);
+      const scope = await memoryScope(conversation, link, data.state);
+      const records = await editMemory(records => records.filter(r => r.conversation !== conversation || inScope(r, scope)));
       if (!JSLGpt.sameQuestions(link, data.state)) throw Error('연결 후 지원서 문항이 변경되었습니다. 연결 변경에서 다시 선택해 주세요.');
-      const mapped = JSLGpt.map(message.candidates, data.state, message.choices);
+      const mapped = JSLGpt.map(message.candidates, data.state, message.choices, records.filter(r => inScope(r, scope)));
       if (!mapped.packet) return { mapping: { rows: mapped.rows, qnas: mapped.qnas } };
       await source(message, sender);
       const token = remember(prepared, 90000, { conversation, revision: link.revision, senderTab: sender.tab.id,
         response: message.response, fingerprint: message.fingerprint, tabId: tab.id, explicitTab: message.tabId != null,
-        documentKey: data.documentKey, packet: mapped.packet });
+        documentKey: data.documentKey, packet: mapped.packet, scope,
+        confirmed: mapped.rows.filter(r => r.manual && JSLGpt.memoryExpression(r.candidate)).map(r => ({
+          expression: JSLGpt.memoryExpression(r.candidate), target: r.target,
+          number: mapped.qnas.find(q => q.id === r.target).number })) });
       return { token, title: link.resume.title, numbers: mapped.packet.answers.map(a => a.number) };
     }
     if (message.type === 'gpt:undo') {
@@ -121,10 +156,23 @@ async function handle(message, sender) {
       if (!pending.explicitTab && (await targets()).filter(t => t.resumeId === link.resume.id).length !== 1) throw Error('지원서 탭이 여러 개입니다. 탭을 다시 선택해 주세요.');
       const fresh = await readTarget(pending.tabId);
       if (fresh.documentKey !== pending.documentKey || !JSLGpt.sameQuestions(link, fresh.state)) throw Error('대상 지원서가 새로고침되거나 변경되었습니다. 다시 적용해 주세요.');
+      if (!inScope(await memoryScope(conversation, link, fresh.state), pending.scope)) throw Error('지원서 문항 구성이 입력 준비 중 변경되었습니다. 다시 적용해 주세요.');
       JSLGpt.validate(pending.packet, fresh.state, true);
       await source(message, sender);
       const result = await chrome.tabs.sendMessage(pending.tabId, { type: 'gpt:write', packet: pending.packet,
         documentKey: pending.documentKey }, { frameId: 0 });
+      let memoryWarning = '';
+      if (pending.confirmed?.length) try {
+        await editMemory(records => {
+          for (const item of pending.confirmed) {
+            if (!(result?.verified || []).includes(item.number)) continue;
+            let record = records.find(r => inScope(r, pending.scope) && r.expression === item.expression);
+            if (!record) { record = { ...pending.scope, expression: item.expression, targets: [], updated: Date.now() }; records.push(record); }
+            record.targets = [...new Set([...record.targets, item.target])]; record.updated = Date.now();
+          }
+          return records;
+        });
+      } catch { memoryWarning = '문항 입력 결과와 별도로, 대응 기억을 보관하지 못했습니다.'; }
       // 실제로 값이 바뀐 문항만 되돌릴 거리가 된다. expectedAnswer가 입력 직전 답변이다.
       const revert = pending.packet.answers.filter(a => (result?.verified || []).includes(a.number) && a.text !== a.expectedAnswer)
         .map(a => ({ id: a.id, number: a.number, question: a.question, text: a.expectedAnswer, wrote: a.text }));
@@ -132,7 +180,7 @@ async function handle(message, sender) {
         senderTab: sender.tab.id, response: message.response, fingerprint: message.fingerprint, tabId: pending.tabId,
         documentKey: pending.documentKey, revert }) : null;
       const reviewQuestion = pending.packet.answers.find(a => (result?.verified || []).includes(a.number)) || pending.packet.answers[0];
-      return { ...result, target: { tabId: pending.tabId, resumeId: link.resume.id,
+      return { ...result, memoryWarning, target: { tabId: pending.tabId, resumeId: link.resume.id,
         question: { id: reviewQuestion.id, number: reviewQuestion.number, question: reviewQuestion.question } }, undoToken };
     } finally { locks.delete(resumeLock); }
   } finally { locks.delete(lock); }
