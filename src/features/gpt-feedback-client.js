@@ -86,13 +86,92 @@
       const echoDeadline = Date.now() + 8000;
       while (Date.now() < echoDeadline) {
         if (conversation() !== message.conversation) break;
-        if (users().some(el => !before.has(el.dataset.messageId) &&
-            echoText((el.querySelector('.whitespace-pre-wrap') || el).innerText) === echoText(expected))) return { status: 'sent' };
+        const echoed = users().find(el => !before.has(el.dataset.messageId) &&
+            echoText((el.querySelector('.whitespace-pre-wrap') || el).innerText) === echoText(expected));
+        if (echoed) {
+          watch(message.attempt, echoed.dataset.messageId);
+          return { status: 'sent', messageId: echoed.dataset.messageId };
+        }
         await wait(100);
       }
       return { status: 'unknown', error: '전송 버튼은 눌렀지만 새 메시지를 확인하지 못했습니다. GPT 대화를 확인해 주세요. 자동으로 다시 보내지 않습니다.' };
     } catch (e) { return { status: clicked ? 'unknown' : 'blocked', error: e.message + (inserted && !clicked ? '\n질문은 GPT 입력창에 남아 있습니다. 내용을 확인한 뒤 이어서 처리해 주세요.' : '') }; }
     finally { watchedEditor?.removeEventListener('input', onEdit); }
+  }
+  // ── 보낸 요청의 답 감시 ──
+  // 보낸 메시지 바로 다음 assistant 메시지만 읽는다. 다음 사용자 메시지 뒤의 답은 이 요청의 답이 아니다.
+  const watching = new Map();
+  function blocksOf(body) {
+    const blocks = [];
+    const text = node => {
+      if (node.nodeType === 3) return node.textContent;
+      if (node.nodeType !== 1 || node.matches('button, script, style, [data-jsl-gpt]')) return '';
+      if (node.tagName === 'BR') return '\n';
+      return Array.from(node.childNodes, text).join('');
+    };
+    const walk = node => {
+      if (node.nodeType !== 1 || node.matches('button, script, style, [data-jsl-gpt]')) return;
+      if (node.matches('table, hr')) { blocks.push({ type: 'boundary', text: '' }); return; }
+      if (node.tagName === 'PRE') {
+        const codes = node.querySelectorAll('code');
+        blocks.push(codes.length === 1 ? { type: 'code', text: codes[0].textContent } : { type: 'boundary', text: '' });
+        return;
+      }
+      if (/^H[1-6]$/.test(node.tagName)) { blocks.push({ type: 'heading', text: text(node) }); return; }
+      if (node.matches('p, li') && !node.querySelector('pre, h1, h2, h3, h4, h5, h6, p, li')) { blocks.push({ type: 'text', text: text(node) }); return; }
+      Array.from(node.children).forEach(walk);
+    };
+    walk(body);
+    return blocks;
+  }
+  function answerAfter(messageId) {
+    const mine = [...document.querySelectorAll('[data-message-author-role="user"][data-message-id]')].find(el => el.dataset.messageId === messageId);
+    if (!mine) return { mine: null };
+    const follows = el => mine.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING;
+    const nextUser = users().find(el => el !== mine && follows(el));
+    const answer = [...document.querySelectorAll('[data-message-author-role="assistant"]')]
+      .find(el => follows(el) && (!nextUser || nextUser.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING));
+    return { mine, answer };
+  }
+  function finished(answer) {
+    const turn = answer.closest('article, [data-testid^="conversation-turn-"]');
+    return !!turn && !answer.closest('[data-is-streaming="true"]') && !turn.querySelector('.result-streaming, [data-is-streaming="true"]') &&
+      !!turn.querySelector('[data-testid="copy-turn-action-button"]');
+  }
+  async function report(attempt, messageId, phase, blocks) {
+    try {
+      const result = await chrome.runtime.sendMessage({ type: 'feedback:reply', attempt, messageId, phase, blocks });
+      if (result?.ok) return result.done ? 'done' : result.pending ? 'retry' : 'ok';
+      return result?.gone ? 'stop' : 'retry';
+    } catch { return 'retry'; }
+  }
+  function watch(attempt, messageId) {
+    if (watching.has(attempt)) return;
+    const job = { messageId, last: '', timer: null };
+    watching.set(attempt, job);
+    const tick = async () => {
+      if (!watching.has(attempt)) return;
+      const { mine, answer } = conversation() ? answerAfter(messageId) : { mine: null };
+      if (mine && answer) {
+        const body = answer.querySelector('.markdown') || answer, blocks = blocksOf(body);
+        const done = finished(answer), signature = (done ? 'c:' : 's:') + body.textContent.length;
+        if (signature !== job.last) {
+          const outcome = await report(attempt, messageId, done ? 'complete' : 'streaming', blocks);
+          if (outcome === 'done' || outcome === 'stop') { watching.delete(attempt); return; }
+          if (outcome === 'ok') job.last = signature;
+        }
+      }
+      // 뒤 탭에서는 타이머가 느려질 수 있다. 완료 판정은 화면 상태로만 하고 시간 제한으로 끝내지 않는다.
+      job.timer = setTimeout(tick, 900);
+    };
+    tick();
+  }
+  async function resume() {
+    if (!conversation()) return;
+    try {
+      const result = await chrome.runtime.sendMessage({ type: 'feedback:watch' });
+      for (const item of result?.waiting || []) watch(item.attempt, item.messageId);
+    } catch { /* 확장 재시작 중이면 다음 대화 확인 때 다시 묻는다. */ }
   }
   chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if (sender.id !== chrome.runtime.id || sender.tab) return;
@@ -113,6 +192,7 @@
     if (!id || id === last) return;
     last = id;
     chrome.runtime.sendMessage({ type: 'feedback:hello' }).catch(() => {});
+    resume();
   }
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes['gpt-conversation:' + conversation()]) { last = ''; announce(); }

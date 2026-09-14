@@ -44,8 +44,9 @@ ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하고, 현재 �
 | 채팅 색·레이아웃 | `src/features/chat-design.css` |
 | GPT 추출·문항 대응 | `src/core/gpt-protocol.js`, `src/features/gpt-response.js` |
 | GPT 연결·라우팅 | `src/core/gpt-background.js`, `src/features/gpt-connect.js` |
-| 현재 문항 인용·질문 UI | `src/core/gpt-feedback.js`(순수 계약·프롬프트), `src/features/gpt-feedback.js`(Shadow DOM) |
-| 자소설 → GPT 전송 | `src/core/gpt-feedback-background.js`(세션·검증·라우팅), `src/features/gpt-feedback-client.js`(웹 입력·전송 확인) |
+| 현재 문항 인용 질문·제안 UI | `src/core/gpt-feedback.js`(순수 계약·요청 형식·판독·위치), `src/features/gpt-feedback.js`(버블·대시보드 화면·받기), `gpt-feedback-marks.js`(답변란 표시) |
+| 자소설 → GPT → 자소설 | `src/core/gpt-feedback-background.js`(세션·검증·라우팅·답 보관), `src/features/gpt-feedback-client.js`(웹 입력·전송 확인·답 감시) |
+| 대시보드 기능 화면 | `src/features/dashboard.js`의 `JSL.ui.openView/closeView/updateView` |
 | 외부 복사 패널 / 호출 버튼 | `src/features/relay-panel.js`, `relay-source.js`, `src/options/options.html`, `src/core/gpt-background.js`의 `relay:` 경로 |
 | 내 이력 직접 입력 / 저장 / 편집 | `src/core/relay-profile.js`(검증·병합·틀), `src/features/relay-panel.js`(패널 안 ✎ 수정·추가·삭제·JSON). 옵션 화면에는 편집 UI 없음. 사용자 정보는 로컬 storage에만 보관 |
 | GPT UI 스타일 | `src/features/gpt-response.css` |
@@ -97,6 +98,9 @@ ChatGPT 웹의 문항별 응답을 자소설 지원서에 입력하고, 현재 �
 - 기존 GPT 입력·생성 상태를 보존한다. 사용자 메시지 ID와 본문을 확인한 경우만 성공이다.
   확인 불가 요청은 자동 재시도하지 않으며, 실제 사이트 전송 시험은 별도 구체적인 허용 범위를 확인한다.
 - 원문/질문이 들어 있는 초안은 같은 탭·지원서·문항의 세션 안에서만 복원한다. 개인정보 처리 범위는 PRIVACY도 함께 수정한다.
+- 요청 형식과 판독 규칙은 `JSLFeedback.prompt/parseReply` 한 곳에서 바꾼다. 형식을 바꾸면 가상 GPT 응답(`feedback.browser.cjs`)과 단위 테스트를 함께 갱신한다.
+- 답은 보낸 메시지 ID 다음 assistant 메시지만 읽는다. 받기는 `locate`로 위치가 확정될 때만 `setAnswer`로 쓰고, 추측으로 덮어쓰지 않는다.
+- 실제 ChatGPT DOM에서의 답 판독·뒤 탭 완료 감지는 가상 페이지로 대신 검증했다. 실계정 전송 시험은 사용자 허락 범위에서만 한다.
 
 ## 디자인·행동 결정
 

@@ -31,6 +31,11 @@
     return P.parse(blocks);
   }
   const bodyOf = message => message.querySelector('.markdown') || message;
+  // 인용 질문 요청의 답은 자소설 GPT 질문 화면이 인용 단위로 반영한다. 문항 전체 적용 패널을 붙이지 않는다.
+  function answersFeedback(message, users) {
+    const previous = users.filter(user => user.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING).pop();
+    return !!previous && !!globalThis.JSLFeedback?.isRequest((previous.querySelector('.whitespace-pre-wrap') || previous).innerText);
+  }
   function complete(message, turn) {
     return !message.closest('[data-is-streaming="true"]') && !turn.querySelector('.result-streaming, [data-is-streaming="true"]') &&
       !!turn.querySelector('[data-testid="copy-turn-action-button"]');
@@ -277,8 +282,10 @@
       if (!valid(entry) || !extract(bodyOf(entry.message)).length) { entry.panel.remove(); entries.delete(id); }
     }
     if (!current) return;
+    const users = [...document.querySelectorAll('[data-message-author-role="user"]')];
     document.querySelectorAll('[data-message-author-role="assistant"]').forEach(message => {
       const turn = message.closest('article, [data-testid^="conversation-turn-"]'), body = bodyOf(message);
+      if (answersFeedback(message, users)) return;
       if (!turn || !complete(message, turn) || stale.get(message) === body.textContent || !extract(body).length || Array.from(entries.values()).some(e => e.message === message)) return;
       attach(message, turn, body);
     });
