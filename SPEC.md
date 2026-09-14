@@ -1397,9 +1397,11 @@ Canvas를 사용할 수 없어도 호출·닫기 동작과 라벨은 유지한�
 - **전송** `src/core/gpt-feedback-background.js`: 기존 연결 역조회·명시적 선택, 중복 탭 거부, 닫힌 대화 재열기, 입력창 준비 10초,
   `preparing → ready → committing → sent/unknown` 또는 `blocked`. 클릭 뒤 8초 안에 새로 생긴 사용자 메시지가 보낸 원문과 같거나
   첫 줄(`JSLFeedback.headline`: 표지·문항 번호·인용 수)로 시작해야 `sent`이며 그 메시지 ID를 기록한다. 실제 GPT는 보낸 메시지의 코드 블록을 꾸며 보여줘
-  표시 글자가 원문과 달라지므로 첫 줄로 인정한다. 못 찾으면 `unknown`.
+  표시 글자가 원문과 달라지므로 첫 줄로 인정한다. 못 찾으면 `unknown`. `sent` 뒤에는 GPT 탭에 머문다(뒤로 간 ChatGPT 탭은 답을 끝까지 그리지 않아 완료를 읽지 못한 사례, 2026-09-15 실사이트).
+  답 판독이 끝나면 GPT 탭의 답 아래에 `[data-jsl-feedback]` `자소설에서 받기 ↗`를 30분 동안 유지한다(React 재렌더 시 다시 붙임). 누르면 `feedback:return`으로 보낸 자소설 탭을 앞으로 가져오고
+  `feedback:open`으로 그 요청 화면을 연다(다른 문항이면 전환 후 연다). 자소설에서 30초 넘게 진행이 없으면 GPT 탭을 앞에 열어 두라는 안내를 붙인다.
   `unknown`에서 사용자가 `보냈어요 · 답 가져오기`(`feedback:claim`)를 누르면 다시 보내지 않고, 이미 열린 그 대화 탭에서 첫 줄로 시작하는 마지막 사용자 메시지를
-  찾아(`feedback:locate`) `sent`로 바꾸고 감시를 시작한다(`feedback:start-watch`). 대화 탭이 없거나 여러 개거나 메시지를 못 찾으면 이유를 보여주고 바꾸지 않는다. `sent` 뒤 자소설 탭을 다시 활성화한다. 확인 불가·재시작된 진행 기록은 자동 재전송하지 않는다.
+  찾아(`feedback:locate`) `sent`로 바꾸고 감시를 시작한다(`feedback:start-watch`). 대화 탭이 없거나 여러 개거나 메시지를 못 찾으면 이유를 보여주고 바꾸지 않는다. 확인 불가·재시작된 진행 기록은 자동 재전송하지 않는다.
   사용자가 `보내지 않았다면 다시 보내기`를 누르면 이전 기록을 정리하고 새 요청 ID로 보낸다. 끝난 기록에서 답변 원문을 지우고 `request.quotes`(id·종류·원문)만 남긴다.
 - **답 감시** `src/features/gpt-feedback-client.js`: 보낸 메시지 ID 바로 다음 assistant 메시지(다음 사용자 메시지 이전)만 읽는다.
   블록(제목/문단·목록/코드/경계)을 추출해 본문 길이가 바뀔 때 `feedback:reply`(streaming/complete)로 보낸다. 완료 기준은 스트리밍 표시 없음 + 턴 복사 버튼.

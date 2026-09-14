@@ -108,12 +108,12 @@
     const blocks = [];
     const text = node => {
       if (node.nodeType === 3) return node.textContent;
-      if (node.nodeType !== 1 || node.matches('button, script, style, [data-jsl-gpt]')) return '';
+      if (node.nodeType !== 1 || node.matches('button, script, style, [data-jsl-gpt], [data-jsl-feedback]')) return '';
       if (node.tagName === 'BR') return '\n';
       return Array.from(node.childNodes, text).join('');
     };
     const walk = node => {
-      if (node.nodeType !== 1 || node.matches('button, script, style, [data-jsl-gpt]')) return;
+      if (node.nodeType !== 1 || node.matches('button, script, style, [data-jsl-gpt], [data-jsl-feedback]')) return;
       if (node.matches('table, hr')) { blocks.push({ type: 'boundary', text: '' }); return; }
       if (node.tagName === 'PRE') {
         const codes = node.querySelectorAll('code');
@@ -160,7 +160,8 @@
         const done = finished(answer), signature = (done ? 'c:' : 's:') + body.textContent.length;
         if (signature !== job.last) {
           const outcome = await report(attempt, messageId, done ? 'complete' : 'streaming', blocks);
-          if (outcome === 'done' || outcome === 'stop') { watching.delete(attempt); return; }
+          if (outcome === 'stop') { watching.delete(attempt); return; }
+          if (outcome === 'done') { watching.delete(attempt); offerReturn(attempt, messageId, line); return; }
           if (outcome === 'ok') job.last = signature;
         }
       }
@@ -168,6 +169,36 @@
       job.timer = setTimeout(tick, 900);
     };
     tick();
+  }
+  // 답 아래에 자소설로 돌아가는 버튼을 둔다. React가 답을 다시 그려도 30분 동안은 다시 붙인다.
+  function offerReturn(attempt, messageId, line) {
+    const until = Date.now() + 1800000;
+    let clicked = false;
+    const place = () => {
+      if (clicked || Date.now() > until || !conversation()) return;
+      const { answer } = answerAfter(messageId, line);
+      if (answer && !document.querySelector('[data-jsl-feedback="' + attempt + '"]')) {
+        const panel = document.createElement('div');
+        panel.dataset.jslFeedback = attempt;
+        const row = document.createElement('div'); row.className = 'jsl-gpt-actions';
+        const go = document.createElement('button'); go.type = 'button'; go.className = 'jsl-gpt-primary'; go.textContent = '자소설에서 받기 ↗';
+        const note = document.createElement('span'); note.className = 'jsl-gpt-muted'; note.textContent = '자비스 · 인용별 수정안을 자소설 GPT 질문 화면에서 받거나 뺄 수 있어요';
+        go.addEventListener('click', async () => {
+          go.disabled = true;
+          try {
+            const result = await chrome.runtime.sendMessage({ type: 'feedback:return', attempt });
+            if (!result?.ok) throw Error(result?.error || '자소설 탭을 열지 못했습니다.');
+            note.textContent = '자소설 탭에서 받기·빼기를 이어서 하세요.';
+          } catch (e) { note.textContent = e.message.includes('Extension context') ? '확장이 다시 로드되었습니다. 페이지를 새로고침해 주세요.' : e.message; }
+          finally { go.disabled = false; }
+        });
+        row.append(go, note); panel.append(row);
+        const body = answer.querySelector('.markdown') || answer;
+        if (body === answer) answer.append(panel); else body.after(panel);
+      }
+      setTimeout(place, 1500);
+    };
+    place();
   }
   async function resume() {
     if (!conversation()) return;

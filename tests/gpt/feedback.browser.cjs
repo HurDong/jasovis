@@ -148,6 +148,11 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
     assert.match(await card(1).innerText(), /JobFit 프로젝트를[\s\S]*→[\s\S]*\[수정 1\] JobFit 프로젝트를[\s\S]*가상 진단 1/);
     assert.match(await card(3).innerText(), /확인 필요[\s\S]*어떤 상황이었는지/);
     assert.equal(await gpt.locator('[data-jsl-gpt]').count(), 0, '인용 질문의 답에는 문항 전체 적용 패널을 붙이지 않는다');
+    const returnBtn = gpt.locator('[data-jsl-feedback] button', { hasText: '자소설에서 받기' });
+    await returnBtn.waitFor();
+    await dash.locator('.view-back').click(); await view.waitFor({ state: 'hidden' });
+    await returnBtn.click();
+    await view.locator('.gq-sum').waitFor();
     assert.equal(await primary.innerText(), '남은 2개 모두 받기');
     await shot('3-review');
     console.log('PASS: streamed reply parsed per quote, ask card, no full-answer apply panel on feedback reply');

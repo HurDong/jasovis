@@ -29,6 +29,7 @@ function setup() {
           if (message.type === 'feedback:changed') { env.notices.push({ tab, ...message }); return; }
           if (message.type === 'feedback:locate') return { conversation: 'fixture', messageId: env.located || null, line: message.line };
           if (message.type === 'feedback:start-watch') { env.started = message; return { watching: true }; }
+          if (message.type === 'feedback:open') { env.opened = { tab, ...message }; return; }
           env.delivers++;
           if (env.hook) await env.hook();
           const auth = await env.dispatch({ type: 'feedback:authorize', attempt: message.attempt, conversation: 'fixture', documentKey: 'gpt-document' }, gpt);
@@ -116,12 +117,12 @@ test('자소설 원본 탭 닫기 시 인용 초안과 전송 기록을 삭제�
 const answerBlocks = [{ type: 'heading', text: '인용 1' }, { type: 'text', text: '진단: 딱딱함' }, { type: 'code', text: '가상 대답' },
   { type: 'heading', text: '인용 2' }, { type: 'text', text: '확인 필요: 어떤 뜻인지 알려 주세요' }];
 const reply = (e, extra = {}, sender = gpt) => e.dispatch({ type: 'feedback:reply', attempt: 'wait', messageId: 'user-message-1', phase: 'complete', blocks: answerBlocks, ...extra }, sender);
-test('전송이 확인되면 보낸 메시지 ID·인용만 남기고 자소설 탭으로 돌아온다', async () => {
+test('전송이 확인되면 보낸 메시지 ID·인용만 남기고 GPT 탭에 머문다', async () => {
   const e = setup(); assert.equal((await e.send('wait')).status, 'sent');
   const record = e.session['feedback:attempt:wait'];
   assert.equal(record.userMessage, 'user-message-1'); assert.equal(record.draft, undefined);
   assert.deepEqual(record.request.quotes.map(q => [q.id, q.kind, q.text]), [[1, 'tone', '가상 답변'], [2, 'ask', '원문']]);
-  assert.deepEqual(e.activated, [2, 1]);
+  assert.deepEqual(e.activated, [2]);
 });
 test('보낸 메시지를 찾지 못하면 답을 기다리지 않고 확인 불가로 둔다', async () => {
   const e = setup(); e.noEcho = true;
@@ -182,4 +183,13 @@ test('확인 불가 요청은 사용자가 보냈다고 확인하면 다시 보�
   e.tabs.length = 0;
   const other = setup(); other.noEcho = true; await other.send('none'); other.tabs.length = 0;
   assert.match((await other.dispatch({ type: 'feedback:claim', attempt: 'none' })).error, /열려 있지 않습니다/);
+});
+test('GPT 탭의 자소설에서 받기는 보낸 자소설 탭을 앞으로 가져와 그 요청 화면을 연다', async () => {
+  const e = setup(); await e.send('wait'); await reply(e);
+  e.activated.length = 0;
+  assert.equal((await e.dispatch({ type: 'feedback:return', attempt: 'wait' }, gpt)).returned, true);
+  assert.deepEqual(e.activated, [1]);
+  assert.deepEqual([e.opened.tab, e.opened.attempt, e.opened.number, e.opened.questionId], [1, 'wait', 1, '91']);
+  assert.equal((await e.dispatch({ type: 'feedback:return', attempt: 'wait' }, { ...gpt, url: 'https://chatgpt.com/c/other' })).ok, false);
+  assert.equal((await e.dispatch({ type: 'feedback:return', attempt: 'wait' }, source)).ok, false);
 });

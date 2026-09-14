@@ -160,8 +160,8 @@
       }
       delete record.draft; // 답변 원문은 남기지 않는다. 판독에 필요한 인용만 request에 있다.
       await put(attemptKey(id), record);
-      // 보낸 사람은 자소설에서 이어서 쓴다. 답을 기다리는 동안 GPT 탭은 뒤에서 감시한다.
-      if (record.status === 'sent') await activate(sender.tab.id).catch(() => {});
+      // 보낸 뒤에는 GPT 탭에 머문다. ChatGPT는 뒤로 간 탭에서 답을 끝까지 그리지 않을 수 있어(2026-09-15 실사이트),
+      // 답이 끝나면 GPT 탭의 "자소설에서 받기"로 돌아온다.
       return { status: record.status, error: record.error };
     } catch (e) {
       const latest = await get(attemptKey(id));
@@ -232,6 +232,16 @@
       return {};
     }
     if (message.type === 'feedback:reply') return reply(message, sender);
+    if (message.type === 'feedback:return') {
+      if (origin(sender) !== 'https://chatgpt.com' || !validId(message.attempt)) throw Error('요청을 확인하지 못했습니다.');
+      const record = await get(attemptKey(message.attempt));
+      if (!record || record.conversation !== JSLGpt.conversation(sender.tab.url || sender.url)) throw Error('이 대화에서 보낸 요청이 아닙니다.');
+      try { await activate(record.sourceTab); }
+      catch { throw Error('보낸 자소설 탭이 닫혔습니다. 지원서를 다시 열어 주세요.'); }
+      await chrome.tabs.sendMessage(record.sourceTab, { type: 'feedback:open', attempt: message.attempt,
+        questionId: record.request?.questionId, number: record.request?.number }, { frameId: 0 }).catch(() => {});
+      return { returned: true };
+    }
     if (message.type === 'feedback:watch') {
       if (origin(sender) !== 'https://chatgpt.com') throw Error('GPT 대화가 아닙니다.');
       const conversation = JSLGpt.conversation(sender.tab.url || sender.url), all = await session.get(null), waiting = [];
@@ -288,7 +298,7 @@
     throw Error('알 수 없는 질문 요청입니다.');
   }
   chrome.runtime.onMessage.addListener((message, sender, reply) => {
-    if (!message?.type?.startsWith(prefix) || ['feedback:deliver', 'feedback:page-info', 'feedback:changed', 'feedback:locate', 'feedback:start-watch'].includes(message.type)) return;
+    if (!message?.type?.startsWith(prefix) || ['feedback:deliver', 'feedback:page-info', 'feedback:changed', 'feedback:locate', 'feedback:start-watch', 'feedback:open'].includes(message.type)) return;
     // 같은 요청의 동시 전송/승인 경쟁을 직렬화한다.
     const operation = message.type + ':' + (message.attempt || sender.tab?.id);
     if (operations.has(operation)) { reply({ ok: false, busy: true, error: '같은 요청을 처리 중입니다.' }); return; }

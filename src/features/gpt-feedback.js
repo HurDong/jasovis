@@ -201,7 +201,9 @@ JSL.register('gpt-feedback', function () {
   }
   function waitingSub() {
     const seen = attempt?.seen?.length || 0, total = draft?.quotes.length || 0;
-    return '인용 ' + total + '개' + (seen ? ' · ' + seen + '개 답 받는 중' : '') + ' · ' + elapsed();
+    const quiet = !seen && attempt?.sentAt && Date.now() - attempt.sentAt > 30000;
+    return '인용 ' + total + '개' + (seen ? ' · ' + seen + '개 답 받는 중' : '') + ' · ' + elapsed() +
+      (quiet ? ' · 진행이 안 보이면 GPT 탭을 앞에 열어 두세요' : '');
   }
   const kindLabel = kind => F.KINDS[kind]?.label || kind;
   function quoteCard(q, { locked = false } = {}) {
@@ -692,6 +694,16 @@ JSL.register('gpt-feedback', function () {
     hideBubble();
     if (draft && rebase()) render(); else updateMarks();
   }, true);
+  chrome.runtime.onMessage.addListener((message, sender) => {
+    if (sender.id !== chrome.runtime.id || sender.tab || message?.type !== 'feedback:open') return;
+    if (draft && message.questionId && message.questionId !== draft.question.id && Number.isInteger(message.number)) {
+      openWhenLoaded = message.questionId;
+      JSL.action('switchQna', { number: message.number });
+      JSL.emit('focus:answer', { number: message.number });
+      return;
+    }
+    reloadAttempt().then(() => openView(true));
+  });
   chrome.runtime.onMessage.addListener((message, sender) => {
     if (sender.id !== chrome.runtime.id || sender.tab || message?.type !== 'feedback:changed') return;
     if (draft && attempt?.id === message.attempt) { reloadAttempt(); return; }
