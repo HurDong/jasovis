@@ -14,9 +14,11 @@ const source = base.resume(55, false, [
   <button id="q1" onclick="model.switch_qna(1)">1번 열기</button><button id="q2" onclick="model.switch_qna(2)">2번 열기</button>
   <script>
   const ta=document.querySelector('textarea.answer');
-  // 실제 Angular처럼 모델 반영 뒤 입력란을 다시 그린다. 입력란 수정은 모델로 올린다.
-  model.$apply=function(fn){fn();ta.value=this.qnas[this.currentQnaIndex].answer;};
-  model.switch_qna(1);ta.addEventListener('input',e=>{model.qnas[model.currentQnaIndex].answer=e.target.value});
+  // 실제 사이트처럼 모델 반영 뒤 입력란을 조금 늦게 다시 그린다. 입력란 값이 사용자 입력으로 바뀐 경우만 모델로 올린다(ng-model).
+  let rendered='';
+  model.$apply=function(fn){fn();const idx=this.currentQnaIndex;setTimeout(()=>{ta.value=rendered=this.qnas[idx].answer;},45);};
+  const baseSwitch=model.switch_qna.bind(model);model.switch_qna=n=>{baseSwitch(n);rendered=ta.value;};
+  model.switch_qna(1);ta.addEventListener('input',e=>{if(e.target.value!==rendered){rendered=e.target.value;model.qnas[model.currentQnaIndex].answer=e.target.value;}});
   </script></body>`);
 // 가상 GPT: 보낸 요청의 인용을 읽어 정해진 형식으로 스트리밍 답을 만든다. localStorage로 새로고침 뒤 대화를 복원한다.
 const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</title><style>body{font:14px/1.5 sans-serif;max-width:680px;margin:40px auto}.whitespace-pre-wrap{white-space:pre-wrap}#prompt-textarea{border:1px solid #aaa;padding:12px;min-height:70px;white-space:pre-wrap}</style></head><body>
@@ -155,6 +157,8 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
     await card(1).locator('.gq-done, .st.done').first().waitFor();
     const once = sourceAnswer.replace('JobFit 프로젝트를', '[수정 1] JobFit 프로젝트를');
     assert.equal(await answer(), once); assert.equal(await target.evaluate(() => model.qnas[0].answer), once);
+    const mirror = await target.evaluate(() => document.querySelector('#jsl-checkpoint')?.shadowRoot?.querySelector('.layer')?.textContent ?? null);
+    assert.equal(mirror.replace(/ $/, ''), once, '검수 마커 복제 층도 받은 글로 다시 그린다');
     await target.locator('#jsl-gpt-feedback-marks .a').waitFor({ state: 'attached' });
     await card(1).getByRole('button', { name: '인용 1 되돌리기' }).click();
     await card(1).getByRole('button', { name: '인용 1 받기' }).waitFor();
@@ -275,7 +279,8 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
     await gpt.evaluate(() => { window.delay = 900; });
     await target.evaluate(() => {
       const q = model.qnas[0]; q.answer = q.answer.replace(/\n/g, '\r\n').trim();
-      document.querySelector('textarea.answer').value = q.answer + '\n';
+      // 사이트가 그린 입력칸 값(LF, 끝 줄바꿈 유지)을 사이트도 알고 있는 상태로 둔다.
+      document.querySelector('textarea.answer').value = q.answer + '\n'; rendered = document.querySelector('textarea.answer').value; // eslint-disable-line no-undef
     });
     assert.notEqual(await target.evaluate(() => model.qnas[0].answer), await answer());
     await add('마지막 문장입니다', 'tone');

@@ -108,7 +108,7 @@ JSL.register('gpt-feedback', function () {
     let result;
     try { result = await chrome.runtime.sendMessage({ type: 'feedback:' + type, ...payload }); }
     catch { throw Error('확장 연결이 끊겼습니다. 확장을 다시 로드했다면 자소설과 GPT 페이지도 새로고침해 주세요.'); }
-    if (!result?.ok) throw Error(result?.error || '질문 요청을 처리하지 못했습니다.');
+    if (!result?.ok) throw Object.assign(Error(result?.error || '질문 요청을 처리하지 못했습니다.'), { busy: !!result?.busy });
     return result;
   }
   function save(value = draft) {
@@ -450,11 +450,28 @@ JSL.register('gpt-feedback', function () {
     render();
     if (!next) { marks().clear(); return; }
     try { await load(version); }
-    catch (e) { if (version === generation) { notice = { tone: 'attn', text: e.message }; render(); } }
+    catch (e) {
+      if (version !== generation) return;
+      if (e.busy) { setTimeout(reloadAttempt, 300); return; } // 다른 불러오기와 겹쳤을 뿐이다. 오류로 보이지 않는다.
+      notice = { tone: 'attn', text: e.message }; render();
+    }
   }
-  async function reloadAttempt() {
-    const version = generation;
-    try { await load(version); } catch (e) { if (version === generation) { notice = { tone: 'attn', text: e.message }; render(); } }
+  // 알림·주기 확인·버튼이 겹쳐도 불러오기는 한 번씩 차례로 한다.
+  let loading = null, loadAgain = false;
+  function reloadAttempt() {
+    if (loading) { loadAgain = true; return loading; }
+    loading = (async () => {
+      do {
+        loadAgain = false;
+        const version = generation;
+        try { await load(version); }
+        catch (e) {
+          if (e.busy) { await wait(300); loadAgain = true; continue; }
+          if (version === generation) { notice = { tone: 'attn', text: e.message }; render(); }
+        }
+      } while (loadAgain);
+    })().finally(() => { loading = null; });
+    return loading;
   }
   function announce() {
     if (!attempt?.reply || announced === attempt.id) return;
@@ -569,9 +586,17 @@ JSL.register('gpt-feedback', function () {
   // ── 받기·빼기·되돌리기 ──
   async function writeAnswer(number, text) {
     const result = await JSL.action('setAnswer', { number, text });
-    await wait(120);
-    const fresh = await JSL.getState(), q = activeQuestion(fresh);
-    return !!(result?.ok && q && F.sameAnswer(q.answer, text) && editor()?.value === text);
+    if (!result?.ok) return false;
+    // 실제 사이트는 모델을 바꾼 뒤 입력칸 값을 조금 늦게 그린다. 값이 반영될 때까지 기다린다.
+    let ok = false;
+    for (let i = 0; i < 25 && !ok; i++) {
+      await wait(60);
+      const q = activeQuestion(await JSL.getState());
+      ok = !!(q && F.sameAnswer(q.answer, text) && editor()?.value === text);
+    }
+    // 검수 마커는 입력 이벤트로만 복제 층을 다시 그린다. 값이 바뀐 뒤 한 번 더 알려 옛 글이 남지 않게 한다.
+    if (ok) editor().dispatchEvent(new Event('input', { bubbles: true }));
+    return ok;
   }
   async function readCurrent() {
     const fresh = await JSL.getState(), q = activeQuestion(fresh), ta = editor();
