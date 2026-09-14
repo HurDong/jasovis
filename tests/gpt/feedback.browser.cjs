@@ -132,6 +132,7 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
     await input.waitFor();
     assert.equal(await target.evaluate(() => document.activeElement?.id), 'jsl-gpt-feedback', '커서가 질문 칸에 있다');
     assert.match(await compose.locator('.quote').innerText(), /JobFit 프로젝트를/);
+    await target.locator('#jsl-gpt-feedback-marks .p').waitFor({ state: 'attached' }); // 다음 프레임의 표시 층 갱신을 기다린다.
     assert.equal(await target.locator('#jsl-gpt-feedback-marks .p').count(), 1, '질문 칸에 쓰는 동안 고른 곳을 칠해 둔다');
     await assertClear('JobFit 프로젝트를', 0, '질문 칸');
     await input.pressSequentially('어디서 한 건지 빠진 것 같아');
@@ -320,10 +321,49 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
     const taBox = await ta.boundingBox();
     assert.ok(box.x >= taBox.x + taBox.width, '답변란 오른쪽에 둔다');
     await input.press('Escape');
-    await offer.waitFor();
-    assert.equal(await ta.evaluate(el => el.value.slice(el.selectionStart, el.selectionEnd)), '데이터 처리에 대한', 'Esc는 고른 곳을 되살린다');
+    await bar.waitFor({ state: 'hidden' });
+    assert.equal(await ta.evaluate(el => el.selectionStart === el.selectionEnd), true, 'Esc는 선택을 접고 질문 바까지 닫는다');
     await shot('7-beside');
-    console.log('PASS: wide screen puts the question box beside the answer; Esc restores the selection');
+    console.log('PASS: wide screen puts the question box beside the answer; Esc closes it');
+
+    for (const method of ['outside', 'answer', 'escape-outside', 'button']) {
+      await select('데이터 처리에 대한'); await ta.press('Alt+q'); await input.waitFor();
+      await input.fill('닫아도 남길 가상 질문');
+      if (method === 'outside') await target.mouse.click(1100, 700);
+      else if (method === 'answer') await ta.click({ position: { x: 10, y: 10 } });
+      else if (method === 'escape-outside') { await ta.focus(); await target.keyboard.press('Escape'); }
+      else await compose.getByRole('button', { name: '질문 칸 닫기', exact: true }).click();
+      await bar.waitFor({ state: 'hidden' });
+      await select('데이터 처리에 대한'); await ta.press('Alt+q'); await input.waitFor();
+      assert.equal(await input.inputValue(), '닫아도 남길 가상 질문', method + ': 닫아도 질문 글은 보존');
+      await input.press('Escape'); await bar.waitFor({ state: 'hidden' });
+    }
+    console.log('PASS: typed compose closes by outside/answer click, Esc outside input and close button, preserving draft');
+
+    // 공고가 왼쪽 여백을 차지하면 질문 칸을 그 뒤에 배치하지 않는다.
+    await target.setViewportSize({ width: 1200, height: 860 });
+    await ta.evaluate(el => { el.style.left = '480px'; el.style.top = '250px'; el.style.width = '700px'; });
+    await target.evaluate(() => {
+      document.getElementById('jsl-jd-panel')?.remove();
+      const panel = document.createElement('div'); panel.id = 'jsl-jd-panel';
+      panel.style.cssText = 'position:fixed;inset:0;z-index:2147483646;pointer-events:none';
+      panel.attachShadow({ mode: 'open' }).innerHTML = '<div class="scroll" style="position:fixed;left:0;top:0;width:400px;height:800px;background:white;pointer-events:auto">가상 공고</div>';
+      document.body.append(panel);
+    });
+    await select('데이터 처리에 대한');
+    await ta.press('Alt+q');
+    await input.waitFor();
+    await target.waitForTimeout(1100);
+    const clearBox = await assertClear('데이터 처리에 대한', 0, '왼쪽 공고 질문 칸');
+    assert.equal(overlaps(clearBox, { left: 0, right: 400, top: 0, bottom: 800 }), false, '공고 영역을 피한다');
+    assert.ok(clearBox.x >= 0 && clearBox.x + clearBox.width <= 1200 && clearBox.y >= 0 && clearBox.y + clearBox.height <= 860);
+    const exposed = await bar.evaluate(el => {
+      const r = el.getBoundingClientRect();
+      return [[r.left + 5, r.top + 5], [r.right - 5, r.bottom - 5]].every(([x, y]) => document.elementFromPoint(x, y)?.id === 'jsl-gpt-feedback');
+    });
+    assert.ok(exposed, '질문 칸 양쪽이 다른 패널에 가려지지 않는다');
+    await shot('8-clear-of-job-panel');
+    console.log('PASS: question box avoids the left job panel and remains fully visible');
 
     // 11. 문항 이탈
     await target.evaluate(() => history.pushState({}, '', '/resume_list'));

@@ -33,16 +33,22 @@ JSL.register('gpt-feedback', function () {
     .box{background:#fff;border:1px solid #f0e2d5;border-radius:12px;box-shadow:0 10px 28px rgba(58,34,15,.16)}
     .offer{display:flex;align-items:center;gap:8px;width:290px;height:36px;padding:0 6px 0 11px;cursor:text;font:inherit;text-align:left}
     .offer:hover{border-color:#ffb377}
-    .offer .spark{flex:none;color:#ff6a00;font-weight:800}
+    .gpt-icon{flex:none;display:flex;width:18px;height:18px;color:#292929}
+    .gpt-icon svg{display:block;width:100%;height:100%}
     .offer .ph{flex:1;min-width:0;color:#a89a8b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     kbd{flex:none;font:600 10.5px/1 ui-monospace,Consolas,monospace;border:1px solid #e5d8ca;border-bottom-width:2px;border-radius:5px;
       padding:3px 5px;background:#fff;color:#8a6a4d}
     .compose{width:380px;padding:9px 10px 8px;border-color:#ff6a00;box-shadow:0 0 0 3px #fff1e8,0 10px 28px rgba(58,34,15,.16);display:flex;flex-direction:column;min-height:0}
-    .quote{flex:none;font-size:11.5px;color:#8a6a4d;border-left:3px solid #ff6a00;padding-left:7px;margin-bottom:5px;
-      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    textarea{display:block;width:100%;min-height:42px;max-height:150px;resize:none;border:0;outline:0;padding:2px;margin:0;
-      font:inherit;font-size:13px;line-height:1.55;color:#332b24;background:transparent}
-    textarea::placeholder{color:#b8a794}
+    .quote-head{display:flex;align-items:flex-start;gap:8px}
+    .quote-source{flex:1;min-width:0;background:#f4f4f4;border-left:3px solid #b5b5b5;border-radius:5px;padding:7px 9px}
+    .field-label{display:block;font-size:11px;font-weight:700;line-height:1.4;color:#666}
+    .quote{margin-top:3px;font-size:11.5px;line-height:1.5;color:#555;display:-webkit-box;-webkit-line-clamp:2;
+      -webkit-box-orient:vertical;overflow:hidden;white-space:normal;overflow-wrap:anywhere}
+    .question-label{display:flex;align-items:center;gap:6px;margin:10px 0 6px;font-size:12px;color:#333}
+    textarea{display:block;width:100%;min-height:56px;max-height:150px;resize:none;border:1px solid #c9c9c9;outline:0;padding:8px 9px;margin:0;border-radius:6px;
+      font:inherit;font-size:13px;line-height:1.55;color:#292929;background:#fff}
+    textarea:focus{border-color:#ff6a00;box-shadow:0 0 0 1px #ff6a00}
+    textarea::placeholder{color:#888}
     textarea[readonly]{color:#8a6a4d}
     .foot{flex:none;display:flex;align-items:center;gap:10px;margin-top:6px}
     .target{min-width:0;flex:1;display:flex;align-items:center;gap:3px;border:0;background:transparent;font:inherit;font-size:11.5px;
@@ -183,11 +189,20 @@ JSL.register('gpt-feedback', function () {
   const cSend = btn('primary', '보내기', () => send(), 'send');
   cInput.rows = 2;
   cInput.maxLength = F.LIMIT.request;
-  cInput.placeholder = '무엇이 아쉬운지, 어떻게 바꾸고 싶은지 적어 주세요';
+  cInput.placeholder = '이 문장에서 무엇이 궁금한가요?';
   cInput.setAttribute('aria-label', '고른 곳에 대한 GPT 질문');
   cFoot.append(cTarget, el('span', 'keys', '↵ 보내기 · Shift+↵ 줄바꿈'), cSend);
-  compose.append(cQuote, cInput, cNote, cPick, cFoot);
-  const grow = () => { cInput.style.height = 'auto'; cInput.style.height = Math.min(150, Math.max(42, cInput.scrollHeight)) + 'px'; };
+  const cHead = el('div', 'quote-head'), cSource = el('div', 'quote-source');
+  cSource.append(el('span', 'field-label', '선택한 문장'), cQuote);
+  const cLabel = el('label', 'field-label question-label');
+  cLabel.append(gptIcon(), el('span', null, 'ChatGPT에게 질문'));
+  cInput.id = 'jsl-feedback-question';
+  cLabel.htmlFor = cInput.id;
+  const cClose = btn('link', '✕', () => closeCompose(true), 'close-compose');
+  cClose.setAttribute('aria-label', '질문 칸 닫기');
+  cHead.append(cSource, cClose);
+  compose.append(cHead, cLabel, cInput, cNote, cPick, cFoot);
+  const grow = () => { cInput.style.height = 'auto'; cInput.style.height = Math.min(150, Math.max(56, cInput.scrollHeight + 2)) + 'px'; };
   cInput.addEventListener('input', () => { request = cInput.value; if (notice) { notice = ''; renderCompose(); } grow(); place(); });
   cInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); send(); }
@@ -223,10 +238,17 @@ JSL.register('gpt-feedback', function () {
   }
 
   // ── 그 밖의 모양 ──
+  function gptIcon() {
+    const icon = el('span', 'gpt-icon');
+    // OpenAI mark: Simple Icons 13.0.0 (CC0), bundled inline; no remote image request.
+    icon.innerHTML = '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z"/></svg>';
+    return icon;
+  }
   function offer() {
     const node = btn('box offer', null, () => openCompose(), 'offer');
     node.setAttribute('aria-label', '고른 곳 GPT에게 질문 (Alt+Q)');
-    node.append(el('span', 'spark', '✦'), el('span', 'ph', '이 부분 GPT에게 질문'), el('kbd', null, 'Alt+Q'));
+    const icon = gptIcon();
+    node.append(icon, el('span', 'ph', '이 부분 GPT에게 질문'), el('kbd', null, 'Alt+Q'));
     return node;
   }
   function pill(parts, hot = false) {
@@ -330,10 +352,15 @@ JSL.register('gpt-feedback', function () {
   // 대시보드와 고른 줄은 가리지 않는다. 자리가 모자라면 위·아래 중 넓은 쪽에서 높이를 줄인다.
   function obstacles(lines) {
     const list = lines.map(r => ({ ...r, left: r.left - 2, right: r.right + 2 }));
-    const dash = document.getElementById('jsl-dashboard');
-    if (dash && dash.style.display !== 'none') {
-      const r = (dash.shadowRoot?.querySelector('.wrap') || dash).getBoundingClientRect();
-      if (r.width && r.height) list.push({ left: r.left - 6, right: r.right + 6, top: r.top - 6, bottom: r.bottom + 6 });
+    for (const [id, selector] of [['jsl-dashboard', '.wrap'], ['jsl-jd-panel', '.scroll, .toggle']]) {
+      const panel = document.getElementById(id);
+      if (!panel || getComputedStyle(panel).display === 'none') continue;
+      // 공고 host는 화면 전체 크기이므로 실제 이미지 영역과 손잡이만 피한다.
+      const parts = panel.shadowRoot?.querySelectorAll(selector) || [];
+      for (const part of parts) {
+        const r = part.getBoundingClientRect();
+        if (r.width && r.height) list.push({ left: r.left - 6, right: r.right + 6, top: r.top - 6, bottom: r.bottom + 6 });
+      }
     }
     return list;
   }
@@ -489,11 +516,12 @@ JSL.register('gpt-feedback', function () {
     cInput.setSelectionRange(cInput.value.length, cInput.value.length);
   }
   function closeCompose(restore) {
+    if (sending) return;
     const p = pick;
-    composing = false; picking = false; notice = '';
+    composing = false; picking = false; notice = ''; pick = null;
     const ta = editor();
-    if (restore && ta && p && !p.lost) { ta.focus({ preventScroll: true }); ta.setSelectionRange(p.start, p.end); }
-    else pick = null;
+    // 선택을 되살리면 offer가 곧바로 다시 뜬다. 커서만 고른 곳 끝으로 돌린다.
+    if (restore && ta && p && !p.lost) { ta.focus({ preventScroll: true }); ta.setSelectionRange(p.end, p.end); }
     render();
   }
   function expand() { collapsed = false; render(); requestAnimationFrame(() => float.querySelector('.card')?.focus({ preventScroll: true })); }
@@ -664,6 +692,9 @@ JSL.register('gpt-feedback', function () {
   ['keyup', 'keypress', 'beforeinput', 'input', 'paste', 'cut', 'copy'].forEach(type => root.addEventListener(type, e => e.stopPropagation()));
   // Alt+Q: 고른 곳이 있으면 질문 칸으로, 없으면 도착한 수정안으로.
   document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && (composing || pick) && !sending && !e.isComposing) {
+      e.preventDefault(); e.stopImmediatePropagation(); closeCompose(true); return;
+    }
     if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.code !== 'KeyQ' || e.isComposing) return;
     const ta = editor(), inFloat = e.composedPath().includes(host);
     if (!inFloat && (!ta || e.target !== ta)) return;
@@ -679,9 +710,8 @@ JSL.register('gpt-feedback', function () {
   document.addEventListener('pointerdown', e => {
     if (e.composedPath().includes(host)) return;
     const ta = editor();
+    if (!sending && (pick || composing)) closeCompose(false);
     if (e.target === ta) { dragging = true; return; }
-    // 답변란·질문 바 밖을 누르면 고른 곳 제안은 닫는다. 쓰던 질문은 남긴다.
-    if (!composing || !request.trim()) { if (pick || composing) { pick = null; composing = false; picking = false; render(); } }
   }, true);
   document.addEventListener('pointerup', () => { if (dragging) { dragging = false; setTimeout(syncSelection, 0); } }, true);
   document.addEventListener('keyup', e => { if (e.target === editor() && e.key !== 'Escape') syncSelection(); }, true);
