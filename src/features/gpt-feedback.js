@@ -703,7 +703,9 @@ JSL.register('gpt-feedback', function () {
     const next = inFloat ? pick : readPick();
     if (next) { pick = next; openCompose(); return; }
     const kind = decide();
-    if (kind === 'arrived' || kind === 'result' || kind === 'unknown') expand();
+    if (kind === 'arrived' || kind === 'result' || kind === 'unknown') { expand(); return; }
+    const sentence = JSL.getCheckpointRange?.(ta);
+    if (sentence) { pick = sentence; openCompose(); }
   }, true);
   document.addEventListener('selectionchange', () => { if (!dragging) syncSelection(); }, true);
   document.addEventListener('select', e => { if (e.target === editor()) syncSelection(); }, true);

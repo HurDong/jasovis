@@ -110,6 +110,15 @@ JSL.register('checkpoint', function () {
     return { start: start, end: n };
   }
 
+  // 질문 바가 검수 표시와 같은 문장을 읽도록 경계 계산을 공유한다. 답변은 쓰지 않는다.
+  JSL.getCheckpointRange = function (ta) {
+    if (!ta || ta !== currentTa || document.activeElement !== ta || !ta.getClientRects().length) return null;
+    var text = ta.value || '', caret = Math.max(0, Math.min(ta.selectionStart, text.length));
+    var range = findSentenceRange(text, caret);
+    var start = Math.min(range.start, caret), end = Math.max(range.end, caret);
+    return text.slice(start, end).trim() ? { start: start, end: end, text: text.slice(start, end) } : null;
+  };
+
   // 텍스트를 드래그/Ctrl+A로 선택하면 브라우저가 textarea 위에 직접 선택 박스를
   // 그린다(백드롭과 별개로 textarea 자신이 그림 → 백드롭보다 위에 얹힘).
   //

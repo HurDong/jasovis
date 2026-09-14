@@ -125,6 +125,14 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
     await shot('1-offer');
     console.log('PASS: mouse and keyboard selection show the question bar without right-click, clear of the selection and dashboard, closes on outside click');
 
+    // 드래그 없이 검수 문장에 커서만 둔 상태에서도 Alt+Q로 질문 칸을 연다.
+    await ta.evaluate(el => { el.focus(); const at = el.value.indexOf('깊은 이해'); el.setSelectionRange(at, at); });
+    await ta.press('Alt+q'); await input.waitFor();
+    assert.match(await compose.locator('.quote').innerText(), /저는 데이터 처리에 대한 깊은 이해를 함양할 수 있었습니다\./);
+    assert.equal(await gpt.locator('[data-message-author-role="user"]').count(), 0, '단축키는 전송하지 않는다');
+    await input.press('Escape'); await bar.waitFor({ state: 'hidden' });
+    console.log('PASS: Alt+Q opens the checkpoint sentence without a selection or sending');
+
     // 2. Alt+Q → 질문 칸에 바로 커서. 사이트 단축키·저장이 새지 않고, 대화 고르기·막힌 전송은 글을 지킨다.
     await select('JobFit 프로젝트를');
     await offer.waitFor();

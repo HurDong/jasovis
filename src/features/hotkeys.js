@@ -22,7 +22,7 @@ JSL.register('hotkeys', function () {
     { group: '검수 (답변란)' },
     { keys: 'Tab / Shift+Tab', desc: '다음 / 이전 문장' },
     { keys: 'Esc', desc: '답변란 벗어나기' },
-    { keys: 'Alt+Q', desc: '고른 곳을 GPT에게 질문 (도착한 수정안 열기)' },
+    { keys: 'Alt+Q', desc: '선택한 글·검수 문장을 GPT에게 질문 (도착한 수정안 열기)' },
     { keys: 'Alt+/', desc: '이 안내 열기·닫기' }
   ];
 
