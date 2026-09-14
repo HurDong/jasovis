@@ -390,7 +390,8 @@ JSL.register('gpt-feedback', function () {
         nodes.push(...draft.quotes.map(q => quoteCard(q, { locked: true })));
       } else if (p === 'unknown') {
         nodes.push(statusBox({ title: '보냈는지 확인하지 못했어요', sub: attempt.error || 'GPT 대화에서 확인해 주세요. 자동으로 다시 보내지 않아요.',
-          buttons: [btn('gq-link', 'GPT에서 확인 ↗', () => focusGpt()), btn('gq-link dim', '보내지 않았다면 다시 보내기', () => resend())] }));
+          buttons: [btn('gq-link', 'GPT에서 확인 ↗', () => focusGpt()), btn('gq-link', '보냈어요 · 답 가져오기', () => claim()),
+            btn('gq-link dim', '보내지 않았다면 다시 보내기', () => resend())] }));
         nodes.push(...draft.quotes.map(q => quoteCard(q, { locked: true })));
       } else {
         const c = counts(), sum = el('div', 'gq-sum');
@@ -554,6 +555,12 @@ JSL.register('gpt-feedback', function () {
     await save(); render();
     send();
   }
+  async function claim() {
+    if (!attempt || phase() !== 'unknown') return;
+    try { await call('claim', { attempt: attempt.id }); notice = null; }
+    catch (e) { notice = { tone: 'attn', text: '답을 가져오지 못했어요', sub: e.message }; }
+    await reloadAttempt();
+  }
   async function focusGpt() {
     try { await call('focus', attempt ? { attempt: attempt.id } : { conversation: selected }); }
     catch (e) { notice = { tone: 'attn', text: e.message }; render(); }
@@ -652,7 +659,8 @@ JSL.register('gpt-feedback', function () {
   document.addEventListener('keyup', e => { if (e.key !== 'Escape') captureSelection(e); else hideBubble(); }, true);
   document.addEventListener('scroll', e => { if (!bubbleRoot.contains(e.target)) hideBubble(); }, true);
   document.addEventListener('pointerdown', e => {
-    if (e.target !== bubbleHost && !e.target.matches?.('textarea.answer')) hideBubble();
+    if (e.target.matches?.('textarea.answer')) suppressed = ''; // 새로 드래그하면 같은 범위라도 다시 버블을 띄운다.
+    else if (e.target !== bubbleHost) hideBubble();
   }, true);
   document.addEventListener('input', e => {
     if (!e.target.matches?.('textarea.answer')) return;

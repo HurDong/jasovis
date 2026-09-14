@@ -46,7 +46,12 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
     setTimeout(()=>{md.innerHTML=html;persist();finish(msg);},400);
   }
   document.querySelector('form').onsubmit=e=>{e.preventDefault();window.sends++;window.lastPrompt=editor.innerText;
-    if(window.echo){const node=document.createElement('div');node.dataset.messageAuthorRole='user';node.dataset.messageId=crypto.randomUUID();const text=document.createElement('div');text.className='whitespace-pre-wrap';text.textContent=window.lastPrompt;node.append(text);box.append(node);persist();respond(window.lastPrompt);}
+    // 실제 GPT처럼 보낸 메시지의 코드 블록을 꾸며 보여준다(표시 글자가 보낸 원문과 달라진다).
+    const prompt=window.lastPrompt,fence=String.fromCharCode(96).repeat(3);
+    const post=()=>{const node=document.createElement('div');node.dataset.messageAuthorRole='user';node.dataset.messageId=crypto.randomUUID();
+      prompt.split(fence).forEach((part,i)=>{if(i%2){const pre=document.createElement('pre');const head=document.createElement('div');head.textContent='plaintext 코드 복사';const code=document.createElement('code');code.textContent=part.trim();pre.append(head,code);node.append(pre);}else{const d=document.createElement('div');d.style.whiteSpace='pre-wrap';d.textContent=part;node.append(d);}});
+      box.append(node);window.posted=(window.posted||0)+1;persist();respond(prompt);};
+    if(window.echo){if(window.echoDelay)setTimeout(post,window.echoDelay);else post();}
     editor.replaceChildren(document.createElement('p'));button.disabled=true;};
   </script></body></html>`;
 (async () => {
@@ -67,7 +72,7 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
     const select = async (text, nth = 0) => {
       await target.locator('textarea.answer').evaluate((ta, [part, index]) => {
         let at = -1; for (let i = 0; i <= index; i++) at = ta.value.indexOf(part, at + 1);
-        ta.focus(); ta.setSelectionRange(at, at + part.length);
+        ta.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); ta.focus(); ta.setSelectionRange(at, at + part.length);
         ta.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 520, clientY: 120 }));
       }, [text, nth]);
     };
@@ -228,6 +233,24 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
     await view.locator('.gq-sum').waitFor({ timeout: 25000 });
     assert.equal(await gpt.evaluate(() => sends), 2);
     console.log('PASS: unknown send is never retried automatically; explicit resend creates a new request');
+
+    // 9-2. 확인 시간(8초)이 지난 뒤에야 메시지가 뜬 경우: 다시 보내지 않고 "보냈어요 · 답 가져오기"로 이어받는다
+    await dash.locator('.gq-actions .jsl-action-btn', { hasText: '모두 빼기' }).click();
+    await primary.filter({ hasText: '새 질문' }).click();
+    await gpt.evaluate(() => { window.echoDelay = 9500; });
+    const postedBefore = await gpt.evaluate(() => window.posted || 0);
+    await add('같은 단어', 'context');
+    await primary.click();
+    await view.locator('.gq-status', { hasText: '보냈는지 확인하지 못했어요' }).waitFor({ timeout: 25000 });
+    const claimBtn = view.locator('.gq-status .gq-link', { hasText: '보냈어요 · 답 가져오기' });
+    await gpt.waitForFunction(n => (window.posted || 0) > n, postedBefore, { timeout: 15000 });
+    const sendsBefore = await gpt.evaluate(() => sends);
+    await claimBtn.click();
+    await view.locator('.gq-sum').waitFor({ timeout: 25000 });
+    assert.match(await card(1).innerText(), /\[수정 1\] 같은 단어/);
+    assert.equal(await gpt.evaluate(() => sends), sendsBefore, '이어받기는 다시 보내지 않는다');
+    await gpt.evaluate(() => { window.echoDelay = 0; });
+    console.log('PASS: late-rendered sent message is claimed by headline without resending');
 
     // 10. 다른 문항에 있을 때 답 도착 → 알림에서 그 문항으로
     await dash.locator('.gq-actions .jsl-action-btn', { hasText: '모두 빼기' }).click();

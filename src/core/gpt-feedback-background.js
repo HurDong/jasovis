@@ -79,6 +79,27 @@
     return { id, status: record.status, error: record.error || '', conversation: record.conversation, sentAt: record.sentAt || null,
       seen: record.progress?.seen || [], streaming: !!record.progress?.streaming, reply: record.reply || null, lost: !!record.lost };
   }
+  const lineOf = record => F.headline(record.request.number, record.request.quotes.length);
+  // 확인 불가로 멈춘 요청을 사용자가 "보냈어요"라고 확인한 경우. 다시 보내지 않고, 열린 대화에서 첫 줄로 보낸 메시지를 찾아 답을 기다린다.
+  async function claim(message, sender) {
+    if (!validId(message.attempt)) throw Error('요청 기록을 찾지 못했습니다.');
+    const key = attemptKey(message.attempt), record = await get(key);
+    if (!record || record.sourceTab !== sender.tab.id || !record.request) throw Error('요청 기록을 찾지 못했습니다.');
+    if (record.status === 'sent' && record.userMessage) return { status: 'sent' };
+    if (record.status === 'blocked') throw Error('보내지 못한 요청입니다. 다시 보내 주세요.');
+    const tabs = (await chrome.tabs.query({ url: 'https://chatgpt.com/*' })).filter(t => JSLGpt.conversation(t.url) === record.conversation);
+    if (tabs.length > 1) throw Error('같은 GPT 대화가 여러 탭에 열려 있습니다. 하나만 남긴 뒤 다시 눌러 주세요.');
+    if (!tabs.length) throw Error('보낸 GPT 대화 탭이 열려 있지 않습니다. GPT에서 확인을 눌러 대화를 연 뒤 다시 눌러 주세요.');
+    let found;
+    try { found = await chrome.tabs.sendMessage(tabs[0].id, { type: 'feedback:locate', line: lineOf(record) }, { frameId: 0 }); }
+    catch { throw Error('GPT 대화 페이지를 읽지 못했습니다. GPT 탭을 새로고침한 뒤 다시 눌러 주세요.'); }
+    if (found?.conversation !== record.conversation || !validId(found.messageId)) throw Error('GPT 대화에서 보낸 요청을 찾지 못했습니다. 실제로 보내지 않았다면 다시 보내기를 눌러 주세요.');
+    Object.assign(record, { status: 'sent', userMessage: found.messageId, sentAt: record.sentAt || Date.now(), error: '', targetTab: tabs[0].id, lost: false });
+    await put(key, record);
+    await chrome.tabs.sendMessage(tabs[0].id, { type: 'feedback:start-watch', attempt: message.attempt, messageId: found.messageId, line: lineOf(record) }, { frameId: 0 }).catch(() => {});
+    await notify(record, message.attempt);
+    return { status: 'sent' };
+  }
   async function notify(record, id) {
     try {
       await chrome.tabs.sendMessage(record.sourceTab, { type: 'feedback:changed', attempt: id, done: !!record.reply,
@@ -217,7 +238,7 @@
       if (!conversation) return { waiting };
       for (const [k, record] of Object.entries(all)) {
         if (!k.startsWith(prefix + 'attempt:') || record.status !== 'sent' || record.reply || record.conversation !== conversation || !record.userMessage) continue;
-        waiting.push({ attempt: k.slice((prefix + 'attempt:').length), messageId: record.userMessage });
+        waiting.push({ attempt: k.slice((prefix + 'attempt:').length), messageId: record.userMessage, line: lineOf(record) });
         if (record.lost || record.targetTab !== sender.tab.id) {
           record.lost = false; record.targetTab = sender.tab.id;
           await put(k, record); await notify(record, k.slice((prefix + 'attempt:').length));
@@ -242,6 +263,7 @@
     if (message.type === 'feedback:targets') return choices(data.state);
     if (message.type === 'feedback:select') return select(message, sender, data);
     if (message.type === 'feedback:send') return send(message, sender, data);
+    if (message.type === 'feedback:claim') return claim(message, sender);
     if (message.type === 'feedback:focus') {
       let conversation = message.conversation;
       if (validId(message.attempt)) {
@@ -266,7 +288,7 @@
     throw Error('알 수 없는 질문 요청입니다.');
   }
   chrome.runtime.onMessage.addListener((message, sender, reply) => {
-    if (!message?.type?.startsWith(prefix) || ['feedback:deliver', 'feedback:page-info', 'feedback:changed'].includes(message.type)) return;
+    if (!message?.type?.startsWith(prefix) || ['feedback:deliver', 'feedback:page-info', 'feedback:changed', 'feedback:locate', 'feedback:start-watch'].includes(message.type)) return;
     // 같은 요청의 동시 전송/승인 경쟁을 직렬화한다.
     const operation = message.type + ':' + (message.attempt || sender.tab?.id);
     if (operations.has(operation)) { reply({ ok: false, busy: true, error: '같은 요청을 처리 중입니다.' }); return; }

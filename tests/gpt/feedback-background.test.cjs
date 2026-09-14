@@ -27,6 +27,8 @@ function setup() {
         async sendMessage(tab, message) {
           if (message.type === 'feedback:page-info') return { conversation: 'fixture', documentKey: 'gpt-document', url: gpt.url, title: '가상 대화', ready: true };
           if (message.type === 'feedback:changed') { env.notices.push({ tab, ...message }); return; }
+          if (message.type === 'feedback:locate') return { conversation: 'fixture', messageId: env.located || null, line: message.line };
+          if (message.type === 'feedback:start-watch') { env.started = message; return { watching: true }; }
           env.delivers++;
           if (env.hook) await env.hook();
           const auth = await env.dispatch({ type: 'feedback:authorize', attempt: message.attempt, conversation: 'fixture', documentKey: 'gpt-document' }, gpt);
@@ -154,7 +156,7 @@ test('GPT 탭이 닫히면 기다리는 요청에 표시하고, 다시 열린 �
   await e.removed(2);
   assert.equal(e.session['feedback:attempt:wait'].lost, true); assert.equal(e.notices.at(-1).done, false);
   const watched = await e.dispatch({ type: 'feedback:watch' }, { ...gpt, tab: { id: 7 } });
-  assert.equal(JSON.stringify(watched.waiting), JSON.stringify([{ attempt: 'wait', messageId: 'user-message-1' }]));
+  assert.equal(JSON.stringify(watched.waiting), JSON.stringify([{ attempt: 'wait', messageId: 'user-message-1', line: '[자비스 요청] 자소설닷컴 1번 문항 답변에서 고칠 곳 2개입니다.' }]));
   assert.equal(e.session['feedback:attempt:wait'].lost, false); assert.equal(e.session['feedback:attempt:wait'].targetTab, 7);
   await reply(e); assert.equal((await e.dispatch({ type: 'feedback:watch' }, gpt)).waiting.length, 0);
 });
@@ -165,4 +167,19 @@ test('정리는 보낸 자소설 탭만 할 수 있고, 연결된 대화 탭을 
   assert.equal((await e.dispatch({ type: 'feedback:focus', attempt: 'wait' })).focused, true); assert.deepEqual(e.activated, [2]);
   assert.equal((await e.dispatch({ type: 'feedback:dismiss', attempt: 'wait' })).ok, true);
   assert.equal(e.session['feedback:attempt:wait'], undefined);
+});
+test('확인 불가 요청은 사용자가 보냈다고 확인하면 다시 보내지 않고 대화에서 첫 줄로 메시지를 찾아 답을 기다린다', async () => {
+  const e = setup(); e.noEcho = true;
+  assert.equal((await e.send('claim')).status, 'unknown');
+  assert.equal((await e.dispatch({ type: 'feedback:claim', attempt: 'claim' })).ok, false); // 아직 대화에 없음
+  assert.equal((await e.dispatch({ type: 'feedback:claim', attempt: 'claim' }, { ...source, tab: { id: 9 } })).ok, false);
+  e.located = 'user-message-9';
+  assert.equal((await e.dispatch({ type: 'feedback:claim', attempt: 'claim' })).status, 'sent');
+  const record = e.session['feedback:attempt:claim'];
+  assert.equal(record.status, 'sent'); assert.equal(record.userMessage, 'user-message-9'); assert.equal(e.delivers, 1);
+  assert.equal(e.started.line, '[자비스 요청] 자소설닷컴 1번 문항 답변에서 고칠 곳 2개입니다.');
+  assert.equal((await reply(e, { attempt: 'claim', messageId: 'user-message-9' })).done, true);
+  e.tabs.length = 0;
+  const other = setup(); other.noEcho = true; await other.send('none'); other.tabs.length = 0;
+  assert.match((await other.dispatch({ type: 'feedback:claim', attempt: 'none' })).error, /열려 있지 않습니다/);
 });

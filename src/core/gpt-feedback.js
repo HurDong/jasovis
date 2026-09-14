@@ -94,9 +94,11 @@
     const end = Math.min(newline < 0 ? d.answer.length : newline, q.end + 120);
     return d.answer.slice(start, end);
   }
+  // 요청 첫 줄. GPT 화면에서 보낸 메시지를 찾는 기준이다(내부 ID 대신).
+  const headline = (number, count) => MARK + ' 자소설닷컴 ' + number + '번 문항 답변에서 고칠 곳 ' + count + '개입니다.';
   function prompt(d) {
     validate(d, true);
-    const lines = [MARK + ' 자소설닷컴 ' + d.question.number + '번 문항 답변에서 고칠 곳 ' + d.quotes.length + '개입니다.',
+    const lines = [headline(d.question.number, d.quotes.length),
       '이 대화에 있는 공고·이력·다른 문항 정보를 근거로 삼아 주세요.', '',
       '문항 ' + d.question.number + ': ' + d.question.question, '',
       '규칙',
@@ -186,6 +188,6 @@
     if (at < 0 || text.slice(at, at + from.length) !== from) fail('원문이 바뀌어 넣지 않았습니다.');
     return text.slice(0, at) + to + text.slice(at + from.length);
   }
-  root.JSLFeedback = { MARK, KINDS, sameAnswer, current, create, validate, check, add, rebase, locate, prompt, isRequest, parseReply, hint, replaceAt };
+  root.JSLFeedback = { MARK, KINDS, headline, sameAnswer, current, create, validate, check, add, rebase, locate, prompt, isRequest, parseReply, hint, replaceAt };
   if (typeof module !== 'undefined') module.exports = root.JSLFeedback;
 })(globalThis);

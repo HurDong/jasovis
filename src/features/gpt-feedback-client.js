@@ -24,6 +24,9 @@
   const echoText = value => normalized(value).replace(/\n+/g, '\n');
   const sameText = (a, b) => echoText(a) === echoText(b);
   const users = () => [...document.querySelectorAll('[data-message-author-role="user"][data-message-id]')];
+  // 실제 GPT는 보낸 메시지의 코드 블록 등을 꾸며 보여준다. 표시 글자 전체 대신 첫 줄(요청 표지 줄)로 찾는다.
+  const shown = el => normalized((el.querySelector('.whitespace-pre-wrap') || el).innerText);
+  const latestWith = line => line ? users().filter(el => shown(el).startsWith(line)).pop() || null : null;
   const busy = () => [...document.querySelectorAll('[data-testid="stop-button"], [data-is-streaming="true"], .result-streaming')].some(visible);
   function composer() {
     const candidates = [...document.querySelectorAll('#prompt-textarea[contenteditable="true"], textarea#prompt-textarea')].filter(visible);
@@ -63,10 +66,10 @@
       if (read(editor)) throw Error('GPT 입력창에 작성 중인 내용이 있습니다. 그 내용을 먼저 처리한 뒤 다시 보내 주세요.');
       if (hasAttachments(form)) throw Error('GPT 입력창의 첨부 파일을 먼저 확인해 주세요.');
       if (busy()) throw Error('GPT가 답변 중입니다. 답변이 끝난 뒤 다시 보내 주세요.');
-      const before = new Set(users().map(el => el.dataset.messageId));
+      const before = new Set(users().map(el => el.dataset.messageId)), beforeEls = new Set(users());
       insert(editor, message.prompt);
       inserted = true; watchedEditor = editor; editor.addEventListener('input', onEdit);
-      const expected = normalized(message.prompt);
+      const expected = normalized(message.prompt), line = expected.split('\n')[0].trim();
       let sendButton;
       const buttonDeadline = Date.now() + 2400;
       while (Date.now() < buttonDeadline) {
@@ -86,10 +89,10 @@
       const echoDeadline = Date.now() + 8000;
       while (Date.now() < echoDeadline) {
         if (conversation() !== message.conversation) break;
-        const echoed = users().find(el => !before.has(el.dataset.messageId) &&
-            echoText((el.querySelector('.whitespace-pre-wrap') || el).innerText) === echoText(expected));
+        const echoed = users().find(el => !beforeEls.has(el) && !before.has(el.dataset.messageId) &&
+            (echoText(shown(el)) === echoText(expected) || (line.length >= 12 && shown(el).startsWith(line))));
         if (echoed) {
-          watch(message.attempt, echoed.dataset.messageId);
+          watch(message.attempt, echoed.dataset.messageId, line);
           return { status: 'sent', messageId: echoed.dataset.messageId };
         }
         await wait(100);
@@ -124,8 +127,8 @@
     walk(body);
     return blocks;
   }
-  function answerAfter(messageId) {
-    const mine = [...document.querySelectorAll('[data-message-author-role="user"][data-message-id]')].find(el => el.dataset.messageId === messageId);
+  function answerAfter(messageId, line) {
+    const mine = users().find(el => el.dataset.messageId === messageId) || latestWith(line);
     if (!mine) return { mine: null };
     const follows = el => mine.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING;
     const nextUser = users().find(el => el !== mine && follows(el));
@@ -145,13 +148,13 @@
       return result?.gone ? 'stop' : 'retry';
     } catch { return 'retry'; }
   }
-  function watch(attempt, messageId) {
+  function watch(attempt, messageId, line) {
     if (watching.has(attempt)) return;
-    const job = { messageId, last: '', timer: null };
+    const job = { messageId, line, last: '', timer: null };
     watching.set(attempt, job);
     const tick = async () => {
       if (!watching.has(attempt)) return;
-      const { mine, answer } = conversation() ? answerAfter(messageId) : { mine: null };
+      const { mine, answer } = conversation() ? answerAfter(messageId, line) : { mine: null };
       if (mine && answer) {
         const body = answer.querySelector('.markdown') || answer, blocks = blocksOf(body);
         const done = finished(answer), signature = (done ? 'c:' : 's:') + body.textContent.length;
@@ -170,7 +173,7 @@
     if (!conversation()) return;
     try {
       const result = await chrome.runtime.sendMessage({ type: 'feedback:watch' });
-      for (const item of result?.waiting || []) watch(item.attempt, item.messageId);
+      for (const item of result?.waiting || []) watch(item.attempt, item.messageId, item.line);
     } catch { /* 확장 재시작 중이면 다음 대화 확인 때 다시 묻는다. */ }
   }
   chrome.runtime.onMessage.addListener((message, sender, reply) => {
@@ -179,6 +182,16 @@
       let ready = false;
       try { composer(); ready = true; } catch { /* 문서가 떠도 GPT 입력창은 나중에 준비될 수 있다. */ }
       reply({ conversation: conversation(), documentKey, url: location.href, title: document.title, ready });
+      return;
+    }
+    if (message?.type === 'feedback:locate') {
+      const found = latestWith(normalized(message.line));
+      reply({ conversation: conversation(), messageId: found?.dataset.messageId || null });
+      return;
+    }
+    if (message?.type === 'feedback:start-watch') {
+      watch(message.attempt, message.messageId, normalized(message.line));
+      reply({ watching: true });
       return;
     }
     if (message?.type !== 'feedback:deliver') return;
