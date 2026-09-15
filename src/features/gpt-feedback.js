@@ -173,7 +173,7 @@ JSL.register('gpt-feedback', function () {
     const ta = editor(), ranges = [];
     if (ta && kind) {
       if (kind === 'compose' && pick && !pick.lost && document.activeElement !== ta) ranges.push({ start: pick.start, end: pick.end, kind: 'pick' });
-      else if (kind === 'applied') ranges.push({ start: applied.at, end: applied.at + applied.length, kind: 'applied' });
+      else if (kind === 'applied' && applied.highlight) ranges.push({ start: applied.at, end: applied.at + applied.length, kind: 'applied' });
       else {
         const range = ['waiting', 'result', 'arrived', 'unknown'].includes(kind) ? anchor(kind) : null;
         if (range) ranges.push({ ...range, kind: 'quote' });
@@ -644,12 +644,20 @@ JSL.register('gpt-feedback', function () {
     const review = { state: 'applied', at, replacement: item.replacement, original: r.quote.text };
     attempt.review = review;
     await call('review', { attempt: attempt.id, review }).catch(() => {});
-    applied = { attempt: attempt.id, at, length: item.replacement.length, review, timer: setTimeout(() => finishApplied(true), 8000) };
+    applied = { attempt: attempt.id, at, length: item.replacement.length, review, highlight: true,
+      timer: setTimeout(() => finishApplied(true), 8000) };
+    const changed = applied;
+    changed.highlightTimer = setTimeout(() => {
+      if (applied !== changed) return;
+      changed.highlight = false;
+      updateMarks(decide()); // 전체 교체 강조만 거두고 기존 커서 문장 검수 표시는 유지한다.
+    }, 2000);
     editor()?.focus({ preventScroll: true });
   });
   function finishApplied(renderAfter) {
     if (!applied) return;
     clearTimeout(applied.timer);
+    clearTimeout(applied.highlightTimer);
     const id = applied.attempt;
     applied = null;
     call('dismiss', { attempt: id }).catch(() => {});
@@ -659,6 +667,7 @@ JSL.register('gpt-feedback', function () {
   const undo = () => task(async () => {
     if (!applied) return;
     clearTimeout(applied.timer);
+    clearTimeout(applied.highlightTimer);
     const r = applied.review, { q, text } = await readCurrent();
     const at = F.locate(text, r.replacement, r.at);
     if (at < 0) { finishApplied(false); toast('바꾼 뒤 직접 고친 곳이라 되돌리지 않았어요', 'fail', { sub: '답변란에서 확인해 주세요.' }); return; }

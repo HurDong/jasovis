@@ -33,7 +33,7 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
   if(saved){box.innerHTML=saved;box.querySelectorAll('[data-is-streaming="true"]').forEach(finish);}
   editor.addEventListener('input',()=>{button.disabled=!editor.innerText.trim();});
   function respond(prompt){
-    const quote=(/고칠 부분: ([^\\n]*)/.exec(prompt)||[])[1],question=(/질문: ([^\\n]*)/.exec(prompt)||[])[1]||'';
+    const quote=(/고칠 부분: ([\\s\\S]*?)(?=\\n(?:주변 문맥: |질문: ))/.exec(prompt)||[])[1],question=(/질문: ([^\\n]*)/.exec(prompt)||[])[1]||'';
     if(quote==null)return;
     const sec=document.createElement('section');sec.dataset.testid='conversation-turn-'+Date.now();
     const art=document.createElement('article');const msg=document.createElement('div');msg.dataset.messageAuthorRole='assistant';msg.dataset.isStreaming='true';
@@ -187,6 +187,8 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
     const mirror = await target.evaluate(() => document.querySelector('#jsl-checkpoint')?.shadowRoot?.querySelector('.layer')?.textContent ?? null);
     assert.equal(mirror.replace(/ $/, ''), once, '검수 마커 복제 층도 바꾼 글로 다시 그린다');
     await target.locator('#jsl-gpt-feedback-marks .a').waitFor({ state: 'attached' });
+    await target.locator('#jsl-gpt-feedback-marks .a').waitFor({ state: 'hidden', timeout: 4000 });
+    assert.equal(await pill.getByRole('button', { name: '되돌리기' }).isVisible(), true, '강조가 사라져도 되돌리기는 유지');
     await pill.getByRole('button', { name: '되돌리기' }).click();
     await card.waitFor();
     assert.equal(await answer(), sourceAnswer);
@@ -372,6 +374,25 @@ const chat = `<!doctype html><html><head><title>가상 자기소개서 대화</t
     assert.ok(exposed, '질문 칸 양쪽이 다른 패널에 가려지지 않는다');
     await shot('8-clear-of-job-panel');
     console.log('PASS: question box avoids the left job panel and remains fully visible');
+
+    // 전체 답변 교체 후에는 잠깐만 전체 강조, 이후 커서 문장만 검수 표시한다.
+    await target.keyboard.press('Escape');
+    await ta.fill(sourceAnswer);
+    await ask(sourceAnswer, '전체 문장 다듬기');
+    await card.getByRole('button', { name: '바꾸기 ↵' }).click();
+    await target.locator('#jsl-gpt-feedback-marks .a').waitFor({ state: 'attached' });
+    await ta.evaluate(el => {
+      const at = el.value.indexOf('깊은 이해'); el.focus(); el.setSelectionRange(at, at);
+      el.dispatchEvent(new Event('click', { bubbles: true }));
+    });
+    await target.locator('#jsl-gpt-feedback-marks .a').waitFor({ state: 'hidden', timeout: 4000 });
+    const sentence = await target.locator('#jsl-checkpoint .mark').innerText();
+    assert.equal(sentence, '저는 데이터 처리에 대한 깊은 이해를 함양할 수 있었습니다.');
+    assert.ok(await pill.getByRole('button', { name: '되돌리기' }).isVisible());
+    await pill.getByRole('button', { name: '되돌리기' }).click();
+    await card.waitFor();
+    assert.equal(await answer(), sourceAnswer);
+    console.log('PASS: whole-answer highlight expires, cursor sentence remains, undo still works');
 
     // 11. 문항 이탈
     await target.evaluate(() => history.pushState({}, '', '/resume_list'));
