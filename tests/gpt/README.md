@@ -1,5 +1,34 @@
 # ChatGPT 응답 일괄 입력 검증
 
+## 단어 공백·뒤 재진술 안내 — 2026-09-15, 분석기 v2
+
+별도 `codex/gpt-spacing-guidance` 브랜치와 `C:\Users\ehd_a\Documents\Git\jasoseol-gpt-spacing-guidance` 워크트리에서 구현했다. 원본의 미커밋 변경은 가져오거나 덮어쓰지 않았다. 커밋·원본 반영·병합·푸시는 하지 않았다.
+
+최초 가상 재현은 네 테스트 중 세 개가 실패했다: 한국어 경계 공백과 표식 없는 재진술 안내는 대응하지 못했고, 반대로 `※ 최근 3년…` 같은 새 조건의 생략은 자동 허용했다. v2는 이 두 방향을 함께 수정했다.
+
+- `spacing-fixtures.cjs`, `spacing-guidance.test.cjs`: 본문·보기 동일/공백 차이, 안내만 생략, 두 차이의 조합, 마침표 없는 `주십시오` 종결, 경험 서술의 원인·방법·판단 근거·결과 목록, 부분·역순 응답을 검증한다. 원문·답변·UTF-16 구간 보존과 비교 근거 종류도 확인한다.
+- 음성: 번호 충돌, 성공/실패·포함/제외, 기간·개수·대상·필수·선택 범위, 알 수 없는 안내, 양쪽 안내 충돌, 동일 본문 대상 여러 개, 숫자·영문·단위·소수 경계, 한 글자 어절/경계 이동, 깨진 괄호·안내 뒤 추가 요구·앞 안내·중복 응답은 수동이다. 긴 지침 호환 경로도 숫자·영문 공백 검사를 우회하지 않는다.
+- 새 단어 공백 허용은 왼쪽의 한글 어간 2자 이상 + `의/을/를/에서/으로`, 오른쪽 한글 2자 이상의 경계이며 삽입과 삭제가 섞이면 보류한다. 모든 한국어 띄어쓰기나 자연어 의미를 판정하는 기능은 아니다. `본인의경험`은 처리하지만 알 수 없는 경계는 계속 추천/선택으로 남긴다.
+- `background.test.cjs`: 준비 결과의 원문 안내·자동 대응 근거 전달과 자동 학습 0건을 추가했다. 기존 버전·연결·문항 지문 무효화, 수동 선택의 검증 후 저장, 준비 이후 변경과 되돌리기 검사는 유지한다. 분석기 v1 기억은 버전 필터에서 제거하며 v2로 이관하지 않는다.
+- `spacing-guidance.browser.cjs`: 실제 MV3 worker/content script/MAIN 경로로 네 문항 자동 입력, 안내 펼쳐보기, 답변/질문 보존, 기억 0건, 390px 폭과 스크린샷, 되돌리기, 부분·역순 입력을 확인한다. 준비 후 원문 질문·기존 답변·GPT 응답 각각의 변경을 멈춤 지점에서 재현하고 입력 거부를 확인한다. 저장 호출·페이지 오류는 0건이다.
+- 과거 `matching` fixture는 원문을 유지했다. 새 조건·선택 범위 안내를 생략한 사례는 자동 성공 기대값을 수동 선택으로 바꾸었다. `※`가 있으면 조건도 생략해도 된다는 과거 기록은 현재 계약이 아니다. 선택 후 입력·기억 재사용·삭제·되돌리기·복합 번호 이동 회귀는 계속 검증한다.
+
+실행: 아래 Node 54개, 새 spacing fixture, 기존 matching·기본 browser·citation MV3 시나리오 통과. 긴 지침 경로를 바꾼 뒤 `JSL_GPT_DETAILED=1`의 browser 전체 시나리오도 통과했다. 출처 배지·코드 블록 추출 구현은 변경하지 않았다. 모든 입력·저장 관련 검증은 가상 페이지에서 수행했다.
+
+```powershell
+node --test tests/gpt/protocol.test.cjs tests/gpt/matching.test.cjs tests/gpt/engine.test.cjs tests/gpt/background.test.cjs tests/gpt/spacing-guidance.test.cjs
+node tests/gpt/spacing-guidance.browser.cjs
+node tests/gpt/matching.browser.cjs
+node tests/gpt/browser.cjs
+node tests/gpt/citation.browser.cjs
+```
+
+Playwright 패키지는 사용 가능한 런타임의 `NODE_PATH`에 지정한다. `JSL_GPT_SPACING_SHOT=<절대 png 경로>`로 새 fixture 적용 UI를 저장할 수 있다.
+
+실사이트는 이미 열린 문제 대화의 질문과 대응 선택지 원문만 읽었다. 문제의 2·3·5번 질문을 로컬 분석기에 넣고 답변을 가상 문자열로 대체했을 때 세 번호 모두 대응, 미해결 0개를 확인했다. 그 질문·개인 답변은 fixture나 이 문서에 보관하지 않았다. 수정된 확장으로 실사이트 입력·저장·제출·GPT 전송은 수행하지 않았으며 모든 실제 자연어 표현의 정확성도 미검증이다.
+
+최초 구현은 위 워크트리에만 있었다. 이후 사용자 요청으로 `C:\Users\ehd_a\Documents\Git\jasoseol`의 `main` 작업 폴더에 변경을 반영했다. 기존 미커밋 작업을 보존했고 커밋·푸시는 하지 않았다. 원본 경로에서 로드한 확장을 재로드한 다음 ChatGPT와 자소설 양쪽 페이지를 새로고침하면 사용할 수 있다. 원본에서 Node 54개를 다시 통과했다.
+
 ## 웹 출처 배지 추출 — 2026-09-15
 
 `citation.browser.cjs`는 가상 사이트에 실제 MV3 확장을 로드한다. 질문 옆에 중첩된 `webpage-citation-pill` DOM과 사이트명·`+1`을 넣으면 기존 코드가 세 문항을 자동 대응하지 못하는 것을 재현했고, 배지를 추출에서 제외한 뒤 세 문항의 자동 대응·입력·되돌리기를 확인했다.

@@ -1,6 +1,7 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const vm = require('node:vm'), fs = require('node:fs'), crypto = require('node:crypto');
 const P = require('../../src/core/gpt-protocol');
+const { narrativePairs } = require('./spacing-fixtures.cjs');
 function fixture(storage = {}) {
   const state = { resume: { id: 55, title: '예시기업' }, qnas: [{ id: 91, number: 1, question: '지원 동기', answer: '기존' }] };
   const targetTabs = [{ id: 2, url: 'https://jasoseol.com/resume/55', title: '예시기업', windowId: 1 }];
@@ -42,6 +43,23 @@ function fixture(storage = {}) {
   const prepare = async (link, extra = {}) => send('gpt:prepare', { revision: link.revision, candidates: [{ key: '0', number: 1, question: '지원 동기', text: '새 답변' }], ...extra });
   return { flags, storage, state, targetTabs, send, connect, prepare };
 }
+test('새 자동 대응의 준비 UI 근거·안내 원문을 전달하고 기억하지 않는다', async () => {
+  const f = fixture(), p = narrativePairs[0];
+  f.state.qnas[0].question = p.source;
+  const link = await f.connect();
+  const prepared = await f.prepare(link, { candidates: [{key:'0',number:1,question:p.response,text:'  검증 답변\n'}] });
+  assert.ok(prepared.token);
+  assert.equal(prepared.comparisons[0].mode,'automatic');
+  assert.equal(prepared.comparisons[0].targetQuestion,p.source);
+  assert.equal(prepared.comparisons[0].targetGuidance.raw,p.source.slice(p.source.indexOf('(')));
+  assert.deepEqual(prepared.comparisons[0].changes.map(c=>c.kind),['word-spacing','guidance-omitted']);
+  const applied = await f.send('gpt:apply',{revision:link.revision,token:prepared.token});
+  assert.equal(applied.applied,true);
+  assert.equal(f.state.qnas[0].question,p.source);
+  assert.equal(f.state.qnas[0].answer,'  검증 답변\n');
+  assert.equal(f.storage['gpt-confirmed-mappings'].length,0);
+});
+
 test('되돌리기는 입력 직전 답변으로 돌리고 토큰은 한 번만 쓴다', async () => {
   const f = fixture(), link = await f.connect(), p = await f.prepare(link);
   const applied = await f.send('gpt:apply', { revision: link.revision, token: p.token });

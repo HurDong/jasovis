@@ -108,10 +108,16 @@
         (/(?:등\s*$|\/)/.test(inner) && !/필수|제외|금지|반드시/.test(inner)) ? '' : whole) + ')';
     }
     const key = value => questionKey(value).replace(/\s/g, '');
-    return { main, full: key(detail), reduced: key(reduced) };
+    return { main, full: key(detail), reduced: key(reduced), rawDetail: detail };
   }
   function detailedMatch(a, b) {
     if (!a || !b || a.main !== b.main || !a.full || !b.full) return false;
+    const protectedTokens = s => s.match(/[A-Za-z0-9]+(?:[.,]\d+)*/g) || [];
+    if (JSON.stringify(protectedTokens(a.rawDetail)) !== JSON.stringify(protectedTokens(b.rawDetail))) return false;
+    const text = s => s.replace(/[()（）\[\]]/g, '').trim();
+    const spacing = spacingDifference(text(a.rawDetail), text(b.rawDetail));
+    const compact = text(a.rawDetail).replace(/\s/g, '');
+    if (spacing.equal && spacing.boundaries.some(({offset}) => /[A-Za-z0-9]/.test(compact.slice(offset - 1, offset + 1)))) return false;
     // 둘 다 서로 다른 예시를 생략해 일치시키지는 않는다. 한쪽 원문과 다른 쪽 축약형이 같아야 한다.
     return a.full === b.full || a.full === b.reduced || a.reduced === b.full;
   }
@@ -170,7 +176,65 @@
       keys.add(c.key);
     }
   }
-  const ANALYZER_VERSION = 1;
+  const ANALYZER_VERSION = 2;
+  // Compare boundaries, not just a whitespace-free key. Only Korean grammatical
+  // anchors are allowed; moved boundaries, Latin/numeric/unit splits stay manual.
+  function spacingDifference(a, b) {
+    const boundaries = s => {
+      let compact = '', spaces = new Set();
+      for (const ch of s.trim()) { if (/\s/.test(ch)) spaces.add(compact.length); else compact += ch; }
+      return { compact, spaces };
+    };
+    const x = boundaries(a), y = boundaries(b);
+    if (!x.compact || x.compact !== y.compact) return { equal: false, safe: false, boundaries: [] };
+    const inserted = [...y.spaces].filter(i => !x.spaces.has(i)), deleted = [...x.spaces].filter(i => !y.spaces.has(i));
+    const changed = [...inserted, ...deleted].sort((a, b) => a - b);
+    const union = [...new Set([0, ...x.spaces, ...y.spaces, x.compact.length])].sort((a,b) => a-b);
+    const safe = changed.length > 0 && changed.every(i => {
+      const p = union.indexOf(i), left = x.compact.slice(union[p-1], i), right = x.compact.slice(i, union[p+1]);
+      return /^[가-힣]{2,}(?:의|을|를|에서|으로)$/.test(left) && /^[가-힣]{2,}$/.test(right);
+    }) && !(inserted.length && deleted.length);
+    return { equal: true, safe, boundaries: changed.map(offset => ({ offset, change: inserted.includes(offset) ? 'insert' : 'delete' })) };
+  }
+  // Prove body restatement or a bounded experience-outline list. Unknown topics
+  // and requirements remain in the key; company-specific synonyms are not inferred.
+  function restatedGuidance(body, detail) {
+    const flat = detail.replace(/^[（(\[［]\s*|\s*[）)\]］]$/g, '').replace(/^\s*[※*•]+\s*/, '').trim();
+    if (!/(?:작성|기술|서술|설명)(?:하시오|하십시오|해\s*(?:주세요|주십시오))?[.!。]?\s*$/.test(flat) ||
+        /[()（）\[\]［］\dA-Za-z]|반드시|필수|제외|금지|최근|기간|이내|이상|이하|한정|대상|선택|하나|가지|않|못|없이|아닌|추가|만\s|또는/.test(flat)) return false;
+    const content = flat.replace(/\s*(?:중심으로|포함하여)\s*/g, ' ')
+      .replace(/구체적으로\s*/g, '').replace(/(?:작성|기술|서술|설명)(?:하시오|하십시오|해\s*(?:주세요|주십시오))?[.!。]?\s*$/, '').trim();
+    if (/[.!?。]/.test(content)) return false;
+    const tokens = s => s.split(/[\s,/·]+/).filter(Boolean).map(t => t.replace(/(?:에서|으로|과|와|을|를|의)$/g, ''));
+    const core = tokens(body), required = tokens(content);
+    let cursor = 0;
+    const repeated = required.length > 0 && required.every(t => {
+      const found = core.indexOf(t, cursor); cursor = found + 1;
+      return t.length >= 2 && found >= 0;
+    });
+    if (repeated) return 'body-restatement';
+    // Experience questions often restate their narrative structure as a trailing
+    // list: context/cause, actions/reasons, outcome/reflection. Require a list,
+    // explicit experience in the body and at least one non-scaffold body anchor.
+    // This proves identification only, never whether the answer covers the guide.
+    if (!/경험|사례/.test(body) || !/등\s*$/.test(content) || !/[,/·]/.test(content)) return false;
+    const compactBody = body.replace(/\s/g, '');
+    let anchors = 0;
+    const scaffold = /^(?:상황|원인|파악|과정|방법|판단|근거|결과|배운점|교훈|수준|및|대한|등)$/;
+    const parts = content.replace(/본인만의|자신만의/g, '').replace(/에 대한|로부터/g, ' ')
+      .replace(/원인파악/g, '원인 파악').replace(/배운\s*점/g, '배운점')
+      .split(/[\s,/·]+/).filter(Boolean);
+    const outlined = parts.every(part => {
+      const token = part.length > 2 ? part.replace(/(?:의|을|를)$/g, '') : part;
+      if (scaffold.test(token)) return true;
+      if (token.length >= 2 && compactBody.includes(token)) { anchors++; return true; }
+      // Nominalized process names retain the action stem; a new action is not inferred.
+      const action = /^(.*)과정$/.exec(token)?.[1];
+      if (action?.length >= 2 && compactBody.includes(action)) { anchors++; return true; }
+      return false;
+    }) && anchors > 0;
+    return outlined ? 'experience-outline' : false;
+  }
   // Shared, lossless analysis. Offsets always address the untouched question, not its key.
   function analyzeQuestion(value, meta = {}) {
     const raw = String(value || ''), spans = [], removed = [];
@@ -190,7 +254,7 @@
     for (let i = 0; i < raw.length; i++) {
       if ('(（[［'.includes(raw[i])) stack.push(i);
       else if (close[raw[i]]) {
-        if (!stack.length) continue; // a heading such as 2) is handled below
+        if (!stack.length) { if (!/^\s*(?:(?:문항|Q)\s*)?\d+$/.test(raw.slice(0, i))) malformed = true; continue; }
         const start = stack.pop();
         if (raw[start] !== close[raw[i]]) malformed = true;
         if (!stack.length) groups.push([start, i + 1]);
@@ -229,15 +293,27 @@
       text = text.slice(numbered[0].length);
       contentOffset += numbered[0].length;
     }
-    const canonical = s => s.replace(/([.!?。])\s*(?:※|\*{1,2}|•)\s*/g, '$1 ').replace(/\s*([（(])/g, ' $1').replace(/\u00a0/g, ' ').replace(/(서술|기술|작성|설명)(?:하시오|하십시오|해\s*주세요)/g, '$1')
+    const canonical = s => s.replace(/([.!?。])\s*(?:※|\*{1,2}|•)\s*/g, '$1 ').replace(/\s*([（(])/g, ' $1').replace(/\u00a0/g, ' ').replace(/(서술|기술|작성|설명)(?:하시오|하십시오|해\s*(?:주세요|주십시오))/g, '$1')
       .replace(/([.!?。])(?=\s|[（(]|$)/g, ' ').replace(/\s+/g, ' ').trim();
     const key = canonical(text);
     const marked = /[.!?。]\s*(?:[（(]\s*)?(?:※|\*{1,2}|•)\s*/.exec(text);
-    const main = canonical(marked ? text.slice(0, marked.index) : text);
-    const detail = marked ? text.slice(marked.index + marked[0].length) : '';
-    // Known instruction vocabulary permits omission only with a unique core + identity.
-    const knownDetail = !!detail && !malformed && /작성|기술|설명|포함|제외|참조|가능/.test(detail) &&
-      !/[)）]\s+[^\s)）]/.test(detail);
+    // Only a complete trailing group after a complete question can be separated.
+    // Keep its raw span even when it cannot be proven to be a restatement.
+    const trailing = !malformed && groups.find(([start, end]) => start >= contentOffset &&
+      !masked.slice(end).trim() && /(?:[.!?。]|(?:하시오|하십시오|해\s*(?:주세요|주십시오)))\s*$/.test(masked.slice(contentOffset, start)) &&
+      !removed.some(([a,b]) => a <= start && b >= end));
+    const splitAt = trailing ? trailing[0] - contentOffset : marked?.index;
+    const bodyText = splitAt == null ? text : text.slice(0, splitAt);
+    const detail = trailing ? raw.slice(...trailing) : marked ? text.slice(marked.index + 1).trim() : '';
+    const main = canonical(bodyText);
+    const guideKind = detail && !malformed && restatedGuidance(bodyText, detail);
+    const knownDetail = !!guideKind;
+    const guidance = detail ? { raw: detail, restated: knownDetail, kind: guideKind || 'unknown',
+      reason: guideKind === 'body-restatement' ? '안내의 내용어가 본 질문에 순서대로 있음' : guideKind === 'experience-outline' ? '경험 질문의 본문 주제와 서술 구조 목록 확인' : '추가 요구인지 확인 필요' } : null;
+    if (trailing) {
+      const span = spans.find(s => s.start === trailing[0] && s.end === trailing[1]);
+      if (span) { span.kind = knownDetail ? 'guidance' : 'unknown'; span.reason = guidance.reason; }
+    }
     const constraints = [];
     for (const m of text.matchAll(/성공|실패|포함|제외|금지|필수|반드시|장점|단점|강점|약점|찬성|반대|않[는은을아]|못[한하했]|아닌|없이|최근\s*\d+\s*년|\d+\s*(?:년|개월|가지|개)|(?:한|두|세)\s*가지/g)) {
       const start = contentOffset + m.index;
@@ -252,10 +328,10 @@
     if (malformed) spans.push({ kind: 'unknown', start: 0, end: raw.length, raw, reason: '불완전한 괄호 구조' });
     return { version: ANALYZER_VERSION, raw, id: meta.id || null, editorNumber: meta.editorNumber ?? null,
       label: meta.label || (prefix?.includes('-') ? prefix : null), prefix, listNumber: meta.listNumber ?? null,
-      key, main, detail, knownDetail, constraints, spans, malformed };
+      key, main, bodyText, detail, guidance, knownDetail, constraints, spans, malformed };
   }
   function compareQuestion(a, b) {
-    const conflicts = [], uncertainty = [], evidence = [];
+    const conflicts = [], uncertainty = [], evidence = [], changes = [];
     const label = a.label, number = a.editorNumber;
     const identity = label ? label === b.label : (number ?? (a.prefix && !a.prefix.includes('-') ? Number(a.prefix) : null)) === b.editorNumber;
     if ((label && label !== b.label) || (number != null && number !== b.editorNumber) ||
@@ -263,7 +339,11 @@
         (a.label && a.prefix?.includes('-') && a.label !== a.prefix) ||
         (b.prefix && !b.prefix.includes('-') && Number(b.prefix) !== b.editorNumber)) conflicts.push('identifier');
     if (identity) evidence.push('identifier');
-    const exact = !!a.key && a.key === b.key, sameMain = !!a.main && a.main === b.main;
+    const spacing = spacingDifference(a.key, b.key), coreSpacing = spacingDifference(a.main, b.main);
+    const exact = !!a.key && a.key === b.key, sameMain = !!a.main && (a.main === b.main || coreSpacing.safe);
+    if (a.raw !== b.raw && a.raw.replace(/\s+/g, ' ').trim() === b.raw.replace(/\s+/g, ' ').trim()) changes.push({ kind: 'whitespace-collapse', text: '연속 공백·줄바꿈 정리' });
+    if (spacing.safe || (sameMain && coreSpacing.safe)) changes.push({ kind: 'word-spacing', text: '한국어 단어 사이 띄어쓰기 차이', boundaries: (spacing.safe ? spacing : coreSpacing).boundaries });
+    if (spacing.equal && !spacing.safe && !exact) uncertainty.push('띄어쓰기 의미 경계 확인 필요');
     const opposite = [['성공', '실패'], ['포함', '제외'], ['장점', '단점'], ['강점', '약점'], ['찬성', '반대']];
     if (!exact) {
       if (opposite.some(([x, y]) => (a.constraints.includes(x) && b.constraints.includes(y)) || (a.constraints.includes(y) && b.constraints.includes(x)))) conflicts.push('opposite');
@@ -273,15 +353,17 @@
       else if (JSON.stringify(as) !== JSON.stringify(bs)) uncertainty.push('조건·부정 표현의 생략 또는 변경');
     }
     const detailMatch = detailedMatch(detailedQuestion(a.raw, a.editorNumber), detailedQuestion(b.raw, b.editorNumber));
-    const omitted = identity && sameMain && ((!a.detail && b.knownDetail) || (!b.detail && a.knownDetail));
-    if (exact || detailMatch || omitted) evidence.push('question');
+    const omitted = identity && sameMain && !a.malformed && !b.malformed && ((!a.detail && b.knownDetail) || (!b.detail && a.knownDetail));
+    const spaced = identity && spacing.safe && !a.malformed && !b.malformed;
+    if (exact || detailMatch || omitted || spaced) evidence.push('question');
     if (detailMatch && !identity) conflicts.push('identity-required');
-    if (omitted) uncertainty.push('작성 안내 생략: 본 질문과 명시적 식별자 확인');
-    if (!exact && !omitted && !detailMatch) uncertainty.push('질문 표현 차이');
+    if (omitted) changes.push({ kind: 'guidance-omitted', text: '뒤 작성 안내 생략: ' + (a.guidance || b.guidance).reason, side: a.detail ? 'source' : 'target', raw: a.detail || b.detail });
+    if (!exact && !omitted && !detailMatch && !spaced) uncertainty.push(a.detail || b.detail ? '작성 안내·추가 요구의 차이 확인 필요' : '질문 본문 차이');
     // A one-sided negative is not a proven opposite, but must not be recommended.
     const score = conflicts.length || uncertainty.some(x => x.startsWith('조건')) ? 0 : similarity(a.main, b.main);
-    return { id: b.id, identity, exact, sameMain, evidence, conflicts, uncertainty, score,
-      sourceQuestion: a.raw, targetQuestion: b.raw, difference: exact ? '허용된 표시 차이 또는 원문 일치' : uncertainty.join(' · ') || '요구 내용 차이' };
+    return { id: b.id, identity, exact, sameMain, evidence, conflicts, uncertainty, score, changes,
+      sourceGuidance: a.guidance, targetGuidance: b.guidance,
+      sourceQuestion: a.raw, targetQuestion: b.raw, difference: [...changes.map(c => c.text), ...uncertainty].join(' · ') || (exact ? '허용된 표시 차이 또는 원문 일치' : '요구 내용 차이') };
   }
   function memoryExpression(candidate) {
     if (!candidate.question?.trim()) return null;
@@ -311,7 +393,7 @@
       }
       // A matching core cannot identify a target when omitted conditions distinguish two slots.
       const competing = comparisons.filter(c => c.sameMain);
-      if (competing.length > 1 && !comparisons.some(c => c.id === target && c.exact)) target = null;
+      if (competing.length > 1) target = null;
       const expression = memoryExpression(candidate);
       const remembered = memories.filter(m => m.expression === expression);
       const ids = new Set(remembered.flatMap(m => m.targets));

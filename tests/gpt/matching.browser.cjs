@@ -22,15 +22,25 @@ const block = (index, overrides = {}) => F.block(index + 1, { heading: '문항 '
     const apply = () => gpt.getByRole('button', { name: '자소설에 적용', exact: true }).click();
     const answers = () => target.evaluate(() => model.qnas.map(q => q.answer));
     const replace = html => gpt.locator('.markdown').evaluate((node, html) => { node.innerHTML = html; }, html);
+    const confirmLegacy = async qnas => {
+      await status('자동으로 맞추지 못');
+      for (const [i, q] of qnas.entries()) {
+        const select = gpt.getByRole('combobox').nth(i);
+        if (!await select.inputValue()) await select.selectOption(String(q.id));
+      }
+      await gpt.getByRole('button', { name: '선택한 문항에 적용' }).click();
+    };
     await apply(); await status('연결할 지원서를 선택');
     await gpt.locator('[data-jsl-gpt] button').filter({ hasText: '/ 탭' }).click();
+    assert.deepEqual(await answers(), F.compoundQnas.map(q => q.answer));
+    await confirmLegacy(F.compoundQnas);
     await status('입력 확인');
     assert.equal(await gpt.getByRole('combobox').count(), 0);
     assert.deepEqual(await answers(), F.compoundPairs.map(p => p.answer));
     assert.deepEqual(await target.evaluate(() => model.qnas.map(q => q.question)), F.compoundPairs.map(p => p.source));
     await gpt.getByRole('button', { name: '되돌리기', exact: true }).click(); await status('되돌림');
     assert.deepEqual(await answers(), F.compoundQnas.map(q => q.answer));
-    console.log('PASS: 13 compound questions, omitted guides, source/answer preservation, native MV3 apply and undo');
+    console.log('PASS: 13 compound questions, new-condition omissions require choices, source/answer preservation, native MV3 apply and undo');
 
     await replace(block(9, { question: '', answer: '단일 4-3 수정\n' }));
     await apply(); await status('문항 10 입력 확인');
@@ -74,18 +84,20 @@ const block = (index, overrides = {}) => F.block(index + 1, { heading: '문항 '
     await replace(F.wrappedPairs.map((p, i) => F.block(i + 1, { question: p.response, answer: p.answer, language: 'text' })).join(''));
     await apply(); await status('연결할 지원서를 선택');
     await gpt.locator('[data-jsl-gpt] button').filter({ hasText: '/ 탭' }).click();
+    await confirmLegacy(F.wrappedQnas);
     await status('문항 1, 2, 3, 4 입력 확인');
     assert.equal(await gpt.getByRole('combobox').count(), 0);
     assert.deepEqual(await answers(), F.wrappedPairs.map(p => p.answer));
     assert.deepEqual(await target.evaluate(() => model.qnas.map(q => q.question)), F.wrappedPairs.map(p => p.source));
     assert.equal(await target.evaluate(() => saves), 0);
     assert.deepEqual(errors, []);
-    console.log('PASS: parenthesized notice omission, NBSP and nested parentheses, four exact MV3 writes without mapping or save');
+    console.log('PASS: unproven parenthesized guides require choices, NBSP/nested parentheses preserved, four exact writes, no save');
     await gpt.getByRole('button', { name: '연결 해제', exact: true }).click(); await status('연결을 해제');
     await target.evaluate(qnas => { model.qnas = qnas; model.currentQnaIndex = 0; }, F.languageQnas);
     await replace(F.languagePairs.map((p, i) => F.block(i + 1, { question: '[700자] ' + p.response + '\n700자 이내 / 영문 1400자', answer: p.answer, language: 'text' })).join(''));
     await apply(); await status('연결할 지원서를 선택');
     await gpt.locator('[data-jsl-gpt] button').filter({ hasText: '/ 탭' }).click();
+    await confirmLegacy(F.languageQnas);
     await status('문항 1, 2, 3, 4 입력 확인');
     assert.equal(await gpt.getByRole('combobox').count(), 0);
     assert.deepEqual(await answers(), F.languagePairs.map(p => p.answer));
@@ -94,7 +106,7 @@ const block = (index, overrides = {}) => F.block(index + 1, { heading: '문항 '
     await gpt.getByRole('button', { name: '되돌리기', exact: true }).click(); await status('되돌림');
     assert.deepEqual(await answers(), F.languageQnas.map(q => q.answer));
     assert.deepEqual(errors, []);
-    console.log('PASS: four question identities survive language limits and omitted notice; exact writes and undo, no save');
+    console.log('PASS: language limits preserve identities; unproven scope expansion requires choice; exact writes and undo, no save');
   } finally {
     await context.close();
     assert.equal(path.dirname(path.resolve(profile)), path.resolve(os.tmpdir()));

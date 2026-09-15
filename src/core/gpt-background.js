@@ -124,7 +124,12 @@ async function handle(message, sender) {
         confirmed: mapped.rows.filter(r => r.manual && JSLGpt.memoryExpression(r.candidate)).map(r => ({
           expression: JSLGpt.memoryExpression(r.candidate), target: r.target,
           number: mapped.qnas.find(q => q.id === r.target).number })) });
-      return { token, title: link.resume.title, numbers: mapped.packet.answers.map(a => a.number) };
+      const comparisons = mapped.rows.filter(r => r.target !== 'skip').map(r => ({
+        number: mapped.qnas.find(q => q.id === r.target).number,
+        mode: r.manual ? 'manual' : r.evidence.includes('confirmed') ? 'confirmed' : 'automatic',
+        ...r.comparisons.find(c => c.id === r.target)
+      }));
+      return { token, title: link.resume.title, numbers: mapped.packet.answers.map(a => a.number), comparisons };
     }
     if (message.type === 'gpt:undo') {
       const undo = undos.get(message.token);

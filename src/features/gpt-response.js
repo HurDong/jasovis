@@ -92,6 +92,7 @@
   }
   // 입력 결과에 딸린 확인·되돌리기는 그 입력에만 유효하다. 연결·재적용 때 함께 버린다.
   function clearResult(entry) {
+    entry.differences?.replaceChildren();
     entry.review.hidden = true; entry.reviewTarget = null;
     entry.undo.hidden = true; entry.undoTarget = null;
   }
@@ -151,7 +152,7 @@
       if (suggested) item.append(el('div', '문항 ' + suggested.number + '의 질문이 비슷합니다. 원문을 비교한 뒤 선택하세요.', 'jsl-gpt-muted'));
       if (row.target) {
         const q = mapping.qnas.find(q => q.id === row.target);
-        item.append(el('div', '대응: 문항 ' + q.number + ' · ' + q.question, 'jsl-gpt-muted'));
+        item.append(el('div', (row.evidence?.includes('confirmed') ? '기억한 대응' : '자동 대응') + ': 문항 ' + q.number + ' · ' + q.question, 'jsl-gpt-muted'));
       }
       // 접어 두지 않는다. 어떤 답변을 어디에 넣는지가 선택의 근거다.
       const preview = el('pre', row.candidate.text, 'jsl-gpt-preview');
@@ -192,6 +193,20 @@
       await apply(entry, tabId, Object.fromEntries(selects.filter(([key]) => explicit.has(key)).map(([key, s]) => [key, s.value])), expected);
     }), 'jsl-gpt-primary'));
   }
+  function showDifferences(entry, pairs) {
+    entry.differences.replaceChildren();
+    for (const pair of pairs || []) {
+      if (!pair.changes?.length && !pair.sourceGuidance && !pair.targetGuidance) continue;
+      const details = el('details', null, 'jsl-gpt-difference');
+      const mode = { automatic: '자동 대응', manual: '사용자 선택', confirmed: '확인한 대응 기억' }[pair.mode];
+      details.append(el('summary', '문항 ' + pair.number + ' · ' + mode + ' · ' + pair.difference));
+      details.append(el('p', '문항 대응은 답변의 작성 조건 충족을 뜻하지 않습니다.'));
+      details.append(el('p', '지원서 질문 원문: ' + pair.targetQuestion));
+      if (pair.targetGuidance) details.append(el('p', (pair.targetGuidance.restated ? '지원서 작성 안내: ' : '지원서 뒤 구간: ') + pair.targetGuidance.raw));
+      if (pair.sourceGuidance) details.append(el('p', (pair.sourceGuidance.restated ? 'GPT 작성 안내: ' : 'GPT 뒤 구간: ') + pair.sourceGuidance.raw));
+      entry.differences.append(details);
+    }
+  }
   async function apply(entry, tabId, choices = {}, expected) {
     const snapshot = await sourceCheck(entry, expected);
     clearResult(entry);
@@ -202,6 +217,7 @@
       ...(tabId == null ? {} : { tabId }) }, snapshot.fingerprint);
     if (result.chooseTab) { chooseTargets(entry, result, false, snapshot.fingerprint); return; }
     if (result.mapping) { chooseMapping(entry, result.mapping, tabId, snapshot.fingerprint); return; }
+    showDifferences(entry, result.comparisons);
     setStatus(entry, 'busy', result.title + ' · 문항 ' + result.numbers.join(', ') + ' 입력 중…');
     const applied = await send(entry, 'gpt:apply', { revision: info.link.revision, token: result.token }, snapshot.fingerprint);
     entry.reviewTarget = applied.target ? { target: applied.target, revision: info.link.revision, fingerprint: snapshot.fingerprint } : null;
@@ -245,6 +261,7 @@
     entry.dot = el('span', '', 'jsl-gpt-dot'); entry.resumeTitle = el('b', '');
     entry.connected.append(entry.dot, entry.resumeTitle);
     entry.choices = el('div', null, 'jsl-gpt-choices');
+    entry.differences = el('div', null, 'jsl-gpt-differences');
     entry.change = button('변경', () => task(entry, async () => {
       const snapshot = await sourceCheck(entry);
       const info = await send(entry, 'gpt:info', {}, snapshot.fingerprint);
@@ -264,7 +281,7 @@
     }), 'jsl-gpt-quiet');
     const actions = el('div', null, 'jsl-gpt-actions');
     actions.append(button('자소설에 적용', () => task(entry, () => apply(entry)), 'jsl-gpt-primary'), entry.connected, entry.change, entry.unlink, entry.forget);
-    panel.append(actions, entry.status, entry.choices);
+    panel.append(actions, entry.status, entry.differences, entry.choices);
     // article 전체가 아니라 markdown과 같은 부모/폭에 둔다.
     if (body === message) message.append(panel); else body.after(panel);
     entries.set(entry.id, entry); linkText(entry, null);

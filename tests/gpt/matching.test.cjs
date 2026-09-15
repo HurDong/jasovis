@@ -9,12 +9,20 @@ const parse = (label, question, text = '가상 답변') => P.parse([
   ...(question ? [{ type: 'text', text: '문항 원문: ' + question }] : []), { type: 'code', text }
 ]);
 const all = () => pairs.flatMap(p => parse(p.label, p.response, p.answer)).map((c, i) => ({ ...c, key: String(i) }));
+// v2: legacy fixtures include new conditions; only explicit user choices resolve them.
+const resolved = (candidates, source) => {
+  const first = P.map(candidates, source);
+  const choices = Object.fromEntries(first.rows.filter(r => !r.target).map(r =>
+    [r.candidate.key, String(source.qnas.find(q => r.candidate.label ? q.question.includes('[문항' + r.candidate.label + ']') : q.number === r.candidate.number).id)]));
+  return P.map(candidates, source, choices);
+};
 
 test('문항 정체성은 본 질문·번호로 확인하고 언어별 분량과 표시 안내는 분리', () => {
   const F = require('./fixtures.cjs');
   const local = { resume: { id: 77 }, qnas: F.languageQnas };
   const candidates = F.languagePairs.flatMap((p, i) => parse(i + 1, p.response, p.answer)).map((c, i) => ({ ...c, key: String(i) }));
-  const packet = P.map(candidates, local).packet;
+  assert.equal(P.map(candidates, local).rows[1].target, null, '책 속 인물까지 선택 범위를 넓힌 안내는 수동');
+  const packet = resolved(candidates, local).packet;
   assert.deepEqual(packet.answers.map(a => a.id), ['401', '402', '403', '404']);
   assert.deepEqual(packet.answers.map(a => a.question), F.languagePairs.map(p => p.source));
   assert.deepEqual(packet.answers.map(a => a.text), F.languagePairs.map(p => p.answer));
@@ -37,11 +45,13 @@ test('복합 번호 13개와 명시적 안내 생략을 대응하고 입력 원�
   const candidates = all();
   assert.deepEqual(candidates.map(c => c.label), pairs.map(p => p.label));
   assert.ok(candidates.every(c => c.number === null));
-  const packet = P.map(candidates, state).packet;
+  const first = P.map(candidates, state);
+  for (const i of [2,3,10]) assert.equal(first.rows[i].target, null, '개수·기간·선택 범위 생략');
+  const packet = resolved(candidates, state).packet;
   assert.deepEqual(packet.answers.map(a => a.id), compoundQnas.map(q => String(q.id)));
   assert.deepEqual(packet.answers.map(a => a.question), pairs.map(p => p.source));
   assert.deepEqual(packet.answers.map(a => a.text), pairs.map(p => p.answer));
-  assert.deepEqual(P.map(candidates.toReversed(), state).packet.answers.map(a => a.number), compoundQnas.map(q => q.number).reverse());
+  assert.deepEqual(resolved(candidates.toReversed(), state).packet.answers.map(a => a.number), compoundQnas.map(q => q.number).reverse());
 });
 test('복합 번호만 있는 부분 수정과 띄어 쓴 번호는 입력칸 순번과 분리', () => {
   for (const label of ['2-2', '2 - 2', '2–2']) {
@@ -109,7 +119,7 @@ test('높은 문자 유사도여도 성공/실패와 포함/제외 변경을 추
   }
 });
 test('복합 문항도 준비 뒤 질문 변경을 유사도로 우회하지 않음', () => {
-  const packet = P.map(all(), state).packet, changed = structuredClone(state);
+  const packet = resolved(all(), state).packet, changed = structuredClone(state);
   changed.qnas[0].question += ' *수정된 안내입니다.';
   assert.equal(P.sameQuestions(P.metadata(state), changed), false);
   assert.throws(() => P.validate(packet, changed), /변경/);
@@ -117,7 +127,8 @@ test('복합 문항도 준비 뒤 질문 변경을 유사도로 우회하지 않
 test('괄호로 감싼 ※ 안내의 생략과 NBSP·중첩 괄호·분량 표기를 처리', () => {
   const source = { resume: { id: 77 }, qnas: wrappedQnas };
   const candidates = wrappedPairs.flatMap((p, i) => parse(String(i + 1), p.response, p.answer)).map((c, i) => ({ ...c, key: String(i) }));
-  const packet = P.map(candidates, source).packet;
+  assert.equal(P.map(candidates, source).packet, null, '표식만으로 새 요구의 생략을 허용하지 않음');
+  const packet = resolved(candidates, source).packet;
   assert.ok(packet);
   assert.deepEqual(packet.answers.map(a => a.number), [1, 2, 3, 4]);
   assert.deepEqual(packet.answers.map(a => a.question), wrappedPairs.map(p => p.source));
@@ -133,6 +144,6 @@ test('명시적 안내 표식 없는 괄호·깨진 괄호·괄호 뒤 추가 �
 test('전각 안내 괄호도 처리하되 양쪽에 있는 안내의 충돌은 보류', () => {
   const main = wrappedPairs[0].response;
   const source = { resume: { id: 77 }, qnas: [{ id: 301, number: 1, question: main + ' （ ※ 결과를 포함해주세요. ）', answer: '' }] };
-  assert.equal(P.map(parse('1', main), source).packet.answers[0].id, '301');
+  assert.equal(P.map(parse('1', main), source).packet, null, '본 질문에 없는 결과 포함은 수동');
   assert.equal(P.map(parse('1', main + ' ( ※ 결과를 제외해주세요. )'), source).packet, null);
 });
