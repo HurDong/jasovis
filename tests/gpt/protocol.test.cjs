@@ -137,3 +137,15 @@ test('대화별 ID는 프로젝트 경로와 독립적이고 새 대화·임의 
   assert.equal(P.conversation('https://chatgpt.com/g/project'), null);
   assert.equal(P.conversation('https://example.com/c/abc-123'), null);
 });
+
+test('글자 수 안내가 "입력"으로 끝나거나 예시 뒤에 붙어도 같은 문항으로 본다', () => {
+  const pair = (site, gpt, number = 1) => P.compareQuestion(P.analyzeQuestion(gpt, { editorNumber: number }), P.analyzeQuestion(site, { editorNumber: number }));
+  const 입력 = pair('지원 동기를 자유롭게 기술 하세요.(50자 이상 400자 이내 입력)', '지원 동기를 자유롭게 기술 하세요.');
+  assert.ok(입력.evidence.includes('question'), 입력.difference);
+  const 예시뒤 = pair('가장 도전적이었던 경험을 기술하세요 (예. 공모전, 동아리 등 단체활동 등 / 50자 이상 800자 이내)',
+    '가장 도전적이었던 경험을 기술하세요. (예. 공모전, 동아리 등 단체활동 등)');
+  assert.ok(예시뒤.evidence.includes('question'), 예시뒤.difference);
+  // 분량이 아닌 조건은 그대로 남겨 충돌로 잡는다.
+  const 반대 = pair('실패 경험을 쓰세요 (성공 사례 제외 / 500자 이내)', '실패 경험을 쓰세요 (성공 사례 포함)');
+  assert.ok(반대.conflicts.includes('opposite'), 반대.difference);
+});

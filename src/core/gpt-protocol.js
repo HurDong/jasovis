@@ -13,7 +13,8 @@
     let s = String(text || '').replace(/\u00a0/g, ' ').trim();
     // 한 덩어리의 수치 제한. 사이트는 '최소 500자, 최대 2,000자 입력가능'처럼 여러 덩어리를 잇기도 한다.
     const one = '(?:(?:공백\\s*(?:포함|제외)|최대|최소)\\s*)?\\d[\\d,]*\\s*(?:자|바이트|bytes?)(?:\\s*(?:이내|이상|이하))?(?:\\s*[,·/]?\\s*공백\\s*(?:포함|제외))?';
-    const limit = one + '(?:\\s*[,·/~∼〜-]?\\s*' + one + ')*(?:\\s*(?:입력|작성)\\s*가능)?';
+    // '600자 이내 입력', '800자 이내 작성'처럼 '가능' 없이 끝나는 표기도 분량 메타다.
+    const limit = one + '(?:\\s*[,·/~∼〜-]?\\s*' + one + ')*(?:\\s*(?:입력|작성)(?:\\s*가능)?)?';
     // 포맷이 아니라 내용으로 분량 메타를 판별한다. 괄호는 경계만 제공한다.
     const language = '(?:국문|한글|영문|영어)(?:\\s*작성)?(?:\\s*시|\\s*기준)?\\s*[:：]?\\s*';
     const amounts = new RegExp('^(?:' + language + ')?' + limit + '(?:\\s*[,;/·]?\\s*' + language + limit + ')*$', 'i');
@@ -42,8 +43,15 @@
         }
       }
       if (prefixStack.length) break;
-      const content = s.slice(start + 1, -1).replace(/[()（）\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
-      if (!amounts.test(content) && !bareRange.test(content)) break;
+      const raw = s.slice(start + 1, -1);
+      const content = raw.replace(/[()（）\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!amounts.test(content) && !bareRange.test(content)) {
+        // '(예. … 등 / 50자 이상 800자 이내)'처럼 작성 안내 뒤에 분량만 덧붙은 경우, 분량 부분만 떼고 안내는 남긴다.
+        const tail = new RegExp('\\s*[/,;·]\\s*(?:' + language + ')?' + limit + '\\s*$', 'i');
+        const reduced = raw.replace(tail, '').trimEnd();
+        if (reduced !== raw && reduced.trim()) s = s.slice(0, start + 1) + reduced + s.slice(-1);
+        break;
+      }
       s = s.slice(0, start).trimEnd();
     }
     s = s.replace(new RegExp('\\s*(?:글자\\s*수\\s*제한|분량)\\s*[:：]\\s*' + limit + '\\s*$', 'i'), '');
@@ -236,6 +244,17 @@
     return outlined ? 'experience-outline' : false;
   }
   // Shared, lossless analysis. Offsets always address the untouched question, not its key.
+  // 괄호 안이 통째로 분량 안내는 아니지만 뒤쪽에만 분량이 붙은 경우, 그 분량이 시작하는 위치를 돌려준다.
+  function tailLimit(group, isLimit) {
+    const inner = group.slice(1, -1);
+    const m = /[\/,;·]\s*[^()（）\[\]［］\/,;·]*$/.exec(inner);
+    if (!m || !inner.slice(0, m.index).trim()) return 0;
+    if (!isLimit('(' + inner.slice(m.index + 1) + ')')) return 0;
+    // 앞의 공백까지 함께 떼어 '… 등)'처럼 남기고, 괄호 앞에 빈칸을 남기지 않는다.
+    let cut = m.index;
+    while (cut > 0 && /\s/.test(inner[cut - 1])) cut--;
+    return cut;
+  }
   function analyzeQuestion(value, meta = {}) {
     const raw = String(value || ''), spans = [], removed = [];
     const add = (kind, start, end, reason) => {
@@ -268,6 +287,8 @@
     if (!malformed) for (const [start, end] of groups) {
       const text = raw.slice(start, end);
       if (isLimit(text)) add('limit', start, end, '독립된 수치·단위·언어별 분량 안내');
+      // '(예. … 등 / 50자 이상 800자 이내)'처럼 안내 뒤에 분량만 덧붙은 괄호는 그 분량 부분만 뗀다.
+      else if (tailLimit(text, isLimit)) add('limit', start + 1 + tailLimit(text, isLimit), end - 1, '괄호 안 뒤쪽 분량 안내');
       else if (/^[(（[［]\s*(?:※\s*)?(?:예시\s*[:：]|예\s*[:：])/.test(text) && !/필수|반드시|금지|제외|최근|\d+\s*(?:년|가지|개)/.test(text)) add('optional', start, end, '명시적 선택 예시');
       else if (/사용해도 됩니다|선택 사항|선택사항/.test(text) && !/필수|반드시|금지/.test(text)) add('optional', start, end, '명시적 선택 허용');
       else add('unknown', start, end, '괄호만으로 생략 가능 여부를 판정하지 않음');
@@ -294,7 +315,9 @@
       contentOffset += numbered[0].length;
     }
     const canonical = s => s.replace(/([.!?。])\s*(?:※|\*{1,2}|•)\s*/g, '$1 ').replace(/\s*([（(])/g, ' $1').replace(/\u00a0/g, ' ').replace(/(서술|기술|작성|설명)(?:하시오|하십시오|해\s*(?:주세요|주십시오))/g, '$1')
-      .replace(/([.!?。])(?=\s|[（(]|$)/g, ' ').replace(/\s+/g, ' ').trim();
+      .replace(/([.!?。])(?=\s|[（(]|$)/g, ' ')
+      // 분량 안내를 떼어낸 자리에 남는 닫는 괄호 앞 공백은 의미 차이가 아니다.
+      .replace(/\s+([）)\]］])/g, '$1').replace(/\s+/g, ' ').trim();
     const key = canonical(text);
     const marked = /[.!?。]\s*(?:[（(]\s*)?(?:※|\*{1,2}|•)\s*/.exec(text);
     // Only a complete trailing group after a complete question can be separated.
