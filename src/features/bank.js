@@ -251,7 +251,27 @@
       if (total === 0 || entries.length === 0) {
         var empty = document.createElement('div');
         empty.className = 'empty';
-        if (total === 0) {
+        if (panelMode === 'top' && counts.top === 0) {
+          empty.textContent = '아직 답변 뱅크에서 서류 합격 이상으로 확인된 답변이 없습니다.';
+          var guide = document.createElement('p');
+          guide.className = 'list-guide';
+          guide.textContent = '자소설닷컴의 자기소개서 목록(작성 중·제출 완료·전형 결과가 보이는 화면)을 열어 주세요.\n확인할 자소서가 있는 기간을 선택하고 목록을 새로고침한 뒤, 이 답변 뱅크로 돌아오세요. 현재 선택한 기간의 답변과 전형 결과를 읽습니다.';
+          empty.appendChild(guide);
+          var listLink = document.createElement('a');
+          listLink.className = 'list-link';
+          listLink.href = 'https://jasoseol.com/resume_list';
+          listLink.target = '_blank';
+          listLink.rel = 'noopener noreferrer';
+          listLink.textContent = '자기소개서 목록 열기 ↗';
+          listLink.setAttribute('aria-label', '자기소개서 목록 열기 (새 탭)');
+          empty.appendChild(listLink);
+          var tabHint = document.createElement('p');
+          tabHint.className = 'list-guide';
+          tabHint.textContent = '새 탭으로 열려 작성 중인 자소서는 그대로 유지됩니다.\n목록을 읽지 못하면 반영되지 않을 수 있습니다.';
+          empty.appendChild(tabHint);
+        } else if (panelMode === 'top') {
+          empty.textContent = '검색·분류 조건에 맞는 우수 답변이 없습니다.\n검색어를 지우거나 분류 필터를 해제해 보세요.';
+        } else if (total === 0) {
           empty.textContent = '저장된 답변이 없습니다.\n작성한 답변은 자동으로 여기 모입니다.';
         } else if (panelMode === 'similar') {
           empty.textContent = '현재 문항과 같은 분류의 답변이 없습니다.\n전체 탭에서 다른 답변을 확인해 보세요.';
@@ -259,8 +279,6 @@
           empty.textContent = '즐겨찾기한 답변이 없습니다.';
         } else if (panelMode === 'recent') {
           empty.textContent = '최근에 복사한 답변이 없습니다.';
-        } else if (panelMode === 'top') {
-          empty.textContent = '서류 전형 이상 통과한 답변이 없습니다.\n목록 페이지를 한 번 열어야 전형 결과가 반영돼요.';
         } else {
           empty.textContent = '검색 결과가 없습니다.';
         }
@@ -455,6 +473,7 @@
         '.chips{display:none;flex-wrap:wrap;gap:5px;margin-top:8px;padding-top:8px;border-top:1px dashed #eadbc9}.chips.show{display:flex}.chip{flex:none;border:1px solid #eadbc9;background:#fff;color:#796b5f;border-radius:999px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;font-family:inherit}.chip:hover{border-color:#ffc399;color:#ff6a00}.chip.active{background:#ff6a00;border-color:#ff6a00;color:#fff;font-weight:700}',
         '.list{overflow-y:auto;flex:1;background:#fff;border-radius:14px 14px 0 0;border-top:1px solid #f0e2d5}.list::-webkit-scrollbar{width:4px}.list::-webkit-scrollbar-thumb{background:#eddfd2;border-radius:2px}.empty{padding:44px 22px;color:#a89a8b;text-align:center;line-height:1.6;white-space:pre-line}',
         '.item{padding:12px 15px;border-bottom:1px solid #f8f1ea;cursor:pointer}.item:hover{background:#fffdfb}.item-top{display:flex;align-items:center;gap:8px}.item-title{flex:1;color:#ff6a00;font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.favorite{border:0;background:transparent;color:#c9bdb2;font-size:18px;line-height:1;padding:2px;cursor:pointer}.favorite:hover,.favorite.active{color:#ff8a00}.section-label{margin-top:7px;color:#b3a08c;font-size:10px;font-weight:700;letter-spacing:.05em}.answer-label{margin-top:8px}.item-question{margin-top:2px;font-weight:700;color:#1f1a15;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.item-answer{margin-top:2px;color:#6f6256;line-height:1.5;white-space:pre-line;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.item.expanded .item-question,.item.expanded .item-answer{display:block;overflow:visible}.item-bottom{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:9px}.copy{border:1.5px solid #ffb377;background:#fff;color:#ff6a00;border-radius:8px;padding:4px 12px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit}.copy:hover,.copy.done{background:#ff6a00;border-color:#ff6a00;color:#fff}.tag{padding:3px 8px;border-radius:999px;background:#fff1e8;color:#de5e00;font-size:10.5px}.meta{color:#b3a493;font-size:10.5px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.expand{margin-left:auto;border:0;background:transparent;color:#9b8d80;font-size:11px;cursor:pointer;padding:3px;font-family:inherit}.expand:hover{color:#ff6a00;text-decoration:underline}',
+        '.list-guide{margin:14px 0;color:#6f6256;font-size:12px;line-height:1.7}.list-link{display:inline-block;border:1px solid #eadbc9;border-radius:8px;padding:8px 12px;background:#fff;color:#6f6256;font-weight:700;text-decoration:underline;text-underline-offset:3px}.list-link:hover{border-color:#ff9b58;color:#a84400}.list-link:focus-visible{outline:2px solid #ff6a00;outline-offset:3px}',
         '.stage{flex:none;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap}.stage-1{background:#f3ece2;color:#8a7358}.stage-2{background:#ffe6cf;color:#c56a00}.stage-3{background:#ffd6a8;color:#a84f00}.stage-4{background:linear-gradient(135deg,#ffe27a,#ff9d3d);color:#5a3800;box-shadow:0 0 0 1px rgba(255,180,0,.45)}'
       ].join('\n');
       root.appendChild(style);
