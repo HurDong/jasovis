@@ -11,3 +11,14 @@
 `node --check src/features/bank.js`, `git diff --check`도 통과했다.
 
 적용 시 확장을 다시 로드하고 작성 중인 초안을 보존한 뒤 자소설 페이지를 새로고침한다.
+
+## 목록 일괄 수집 회귀 검사
+
+`node tests/bank/collection.browser.cjs`는 실제 list-main.js, bridge.js, bank.js를 함께 실행하고
+Angular 목록과 Chrome storage만 가상 데이터로 대체한다. 초기 빈 목록 → 여러 자소서 로딩,
+기간 전환, 답변 지연 준비, 동일 상태 중복 억제, 요청 실패 재시도, 오래된 응답 폐기,
+열린 목록에서 뱅크 초기화 후 재수집, 기존 기간 전형 결과 보존을 확인한다.
+
+`JSL_BANK_BASELINE=1`로 실행하면 dca1707의 bank.js로 같은 시나리오를 실행한다.
+2026-09-26: 수정 전 초기 빈 목록 후 수집 검사 실패, 수정 후 전체 시나리오와 기존 안내 UI 검사 통과.
+실사이트의 현재 Angular 모델에 답변 본문이 제공되는지와 실제 계정 재수집 성공은 별도 확인이 필요하다.

@@ -70,7 +70,9 @@
     var bank = null;       // 저장소의 최신 사본 (직전 저장본 비교용)
     var pending = {};      // 디바운스 대기 중인 변경분 { qnaId: entry }
     var timer = null;
-    var importedList = false; // 목록 페이지 일괄 수집은 세션당 1회
+    var importedListSignature = '';
+    var currentListSignature = '';
+    var importingList = false;
     var panelHost = null;
     var panelEls = {};
     var panelOpen = false;
@@ -255,7 +257,7 @@
           empty.textContent = '아직 답변 뱅크에서 서류 합격 이상으로 확인된 답변이 없습니다.';
           var guide = document.createElement('p');
           guide.className = 'list-guide';
-          guide.textContent = '자소설닷컴의 자기소개서 목록(작성 중·제출 완료·전형 결과가 보이는 화면)을 열어 주세요.\n확인할 자소서가 있는 기간을 선택하고 목록을 새로고침한 뒤, 이 답변 뱅크로 돌아오세요. 현재 선택한 기간의 답변과 전형 결과를 읽습니다.';
+          guide.textContent = '자소설닷컴의 자기소개서 목록(작성 중·제출 완료·전형 결과가 보이는 화면)을 열어 주세요.\n확인할 자소서가 있는 기간을 선택하고 목록 로딩이 끝난 뒤, 이 답변 뱅크로 돌아오세요. 현재 선택한 기간의 답변과 전형 결과를 읽습니다.';
           empty.appendChild(guide);
           var listLink = document.createElement('a');
           listLink.className = 'list-link';
@@ -655,15 +657,28 @@
 
     // 목록 페이지 일괄 수집: 현재 시즌 모든 자소서의 문항을 한 번에 가져와 저장.
     // (편집 페이지를 일일이 열지 않아도 뱅크가 채워지도록)
-    function importFromList() {
-      if (importedList || bank === null) return;
-      importedList = true;
+    function listSignature(resumes) {
+      return JSON.stringify(resumes.map(function (r) {
+        return [String(r.id), r.qnaTotal, r.qnaFilled];
+      }).sort(function (a, b) { return a[0].localeCompare(b[0]); }));
+    }
+
+    function importFromList(signature) {
+      if (importingList || importedListSignature === signature || bank === null) return;
+      importingList = true;
       JSL.action('getFullResumes').then(function (r) {
         try {
+          if (currentListSignature !== signature) return; // 기간 전환/편집기 이동 뒤의 오래된 응답
           if (!r || !r.ok || !r.data || !Array.isArray(r.data.resumes)) {
-            importedList = false; // 실패 시 다음 state 주기에 재시도
             return;
           }
+          var receivedSignature = listSignature(r.data.resumes.map(function (res) {
+            var qnas = Array.isArray(res.qnas) ? res.qnas : [];
+            return { id: res.id, qnaTotal: qnas.length, qnaFilled: qnas.filter(function (q) {
+              return q && String(q.answer == null ? '' : q.answer).trim();
+            }).length };
+          }));
+          if (receivedSignature !== signature) return; // 목록/본문이 아직 준비되지 않았으면 다음 state에서 재시도
           var dirty = false;
           r.data.resumes.forEach(function (res) {
             (res.qnas || []).forEach(function (q) {
@@ -686,6 +701,7 @@
               dirty = true;
             });
           });
+          importedListSignature = signature;
           if (dirty) {
             if (timer) clearTimeout(timer);
             timer = setTimeout(function () {
@@ -693,18 +709,19 @@
             }, 1000); // 일괄 수집은 1초 뒤 바로 저장
           }
         } catch (e) { console.warn('[자비스] 답변 뱅크 일괄 수집 오류', e); }
-      }).catch(function () { importedList = false; });
+      }).catch(function () {}).finally(function () { importingList = false; });
     }
 
     function handleState(state) {
       try {
         if (state && state.page === 'list') {
+          if (bank === null) return; // 저장소를 읽기 전에 기존 기간의 전형 결과를 덮어쓰지 않는다.
           if (panelOpen && panelHost) {
             panelOpen = false;
             panelHost.style.display = 'none';
           }
           if (Array.isArray(state.resumes)) {
-            var stages = {};
+            var stages = Object.assign({}, resumeStages);
             state.resumes.forEach(function (r) { if (r && r.id != null) stages[r.id] = r.category; });
             var stagesJSON = JSON.stringify(stages);
             if (stagesJSON !== lastResumeStagesJSON) {
@@ -714,9 +731,15 @@
               if (panelOpen) renderBankPanel();
             }
           }
-          importFromList();
+          if (Array.isArray(state.resumes) && state.resumes.length) {
+            currentListSignature = listSignature(state.resumes);
+            importFromList(currentListSignature);
+          } else {
+            currentListSignature = '';
+          }
           return;
         }
+        currentListSignature = '';
         if (!state || !state.resume || !Array.isArray(state.qnas)) return;
         if (bank === null) return; // 초기 로드 전이면 다음 주기에 처리
         var resume = state.resume;
@@ -783,7 +806,11 @@
     try {
       chrome.storage.onChanged.addListener(function (changes, areaName) {
         if (areaName !== 'local') return;
-        if (changes[STORAGE_KEY]) bank = changes[STORAGE_KEY].newValue || {};
+        if (changes[STORAGE_KEY]) {
+          var nextBank = changes[STORAGE_KEY].newValue || {};
+          if (Object.keys(bank || {}).some(function (id) { return !nextBank[id]; })) importedListSignature = '';
+          bank = nextBank;
+        }
         if (changes[BANK_META_KEY]) bankMeta = changes[BANK_META_KEY].newValue || {};
         if (changes[RESUME_STAGE_KEY]) {
           resumeStages = changes[RESUME_STAGE_KEY].newValue || {};
