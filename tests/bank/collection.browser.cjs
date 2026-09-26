@@ -30,7 +30,10 @@ const root = path.resolve(__dirname, '../..');
         }, onChanged: { addListener: fn => listeners.push(fn) }
       } };
       window.importCalls = 0;
-      window.addEventListener('JSL_REQ', ev => { if (ev.detail.action === 'getFullResumes') importCalls++; });
+      window.importRequests = [];
+      window.addEventListener('JSL_REQ', ev => { if (ev.detail.action === 'getFullResumes') {
+        importCalls++; importRequests.push(ev.detail.payload);
+      } });
       window.res = (id, answer, category = 2) => ({ id, name: '가상 기업 ' + id, category,
         qnas: [{ id: id * 100, number: 1, question: '지원동기', answer }] });
       window.broadcast = () => JSL.getState().then(state => window.dispatchEvent(new CustomEvent('JSL_STATE', { detail: state })));
@@ -77,6 +80,7 @@ const root = path.resolve(__dirname, '../..');
         ? (hold = false, new Promise(resolve => { window.release = resolve; })) : action(name, payload);
       scope.resumesInCurrentSeason = [res(5, '이전 기간 가상 답변')]; await broadcast();
     });
+    await page.waitForFunction(() => typeof release === 'function');
     await page.evaluate(async () => {
       scope.resumesInCurrentSeason = [res(6, '현재 기간 가상 답변')]; await broadcast();
       release({ ok: true, data: { resumes: [{ id: 5, title: '가상 기업 5', qnas: scope.resumesInCurrentSeason[0].qnas }] } });
@@ -87,6 +91,16 @@ const root = path.resolve(__dirname, '../..');
     // Clearing local bank while the list stays open makes the next snapshot collect it again.
     await page.evaluate(() => chrome.storage.local.set({ jslAnswerBank: {} }));
     await page.waitForFunction(() => !!data.jslAnswerBank[600], { timeout: 6000 });
+    await page.evaluate(async () => {
+      importRequests.length = 0;
+      scope.resumesInCurrentSeason = Array.from({ length: 23 }, (_, i) => res(100 + i, '가상 긴 답변 '.repeat(300)));
+      await broadcast();
+      window.callsBeforeYield = importRequests.length;
+    });
+    await page.waitForFunction(() => !!data.jslAnswerBank[12200]);
+    assert.equal(await page.evaluate(() => callsBeforeYield), 0, 'state handling does not synchronously request full answers');
+    assert.deepEqual(await page.evaluate(() => importRequests.map(r => r.offset)), [0, 5, 10, 15, 20]);
+    assert.equal(await page.evaluate(() => importRequests.every(r => r.limit === 5)), true);
     console.log('PASS: real list-main + bridge + bank: delayed list, period switch, delayed answers, unchanged deduplication, failed request retry, stale response, reset recovery, previous stages preserved');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

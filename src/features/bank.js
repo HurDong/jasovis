@@ -663,10 +663,35 @@
       }).sort(function (a, b) { return a[0].localeCompare(b[0]); }));
     }
 
+    // 렌더/입력 사이에 수집을 끼워 넣는다. MAIN에서 전체 답변을 한 번에 복제하지 않는다.
+    function collectionTurn() {
+      return new Promise(function (resolve) {
+        if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(resolve, { timeout: 500 });
+        else setTimeout(resolve, 32);
+      });
+    }
+
+    async function readListInBatches(signature) {
+      var resumes = [];
+      var total = null;
+      do {
+        await collectionTurn();
+        if (currentListSignature !== signature || location.pathname.indexOf('/resume_list') !== 0) return null;
+        var r = await JSL.action('getFullResumes', { offset: resumes.length, limit: 5 });
+        if (!r || !r.ok || !r.data || !Array.isArray(r.data.resumes) ||
+            !Number.isSafeInteger(r.data.total) || r.data.offset !== resumes.length ||
+            (total !== null && total !== r.data.total) || !r.data.resumes.length) return null;
+        total = r.data.total;
+        resumes = resumes.concat(r.data.resumes);
+        if (resumes.length > total) return null;
+      } while (resumes.length < total);
+      return { ok: true, data: { resumes: resumes } };
+    }
+
     function importFromList(signature) {
       if (importingList || importedListSignature === signature || bank === null) return;
       importingList = true;
-      JSL.action('getFullResumes').then(function (r) {
+      readListInBatches(signature).then(async function (r) {
         try {
           if (currentListSignature !== signature) return; // 기간 전환/편집기 이동 뒤의 오래된 응답
           if (!r || !r.ok || !r.data || !Array.isArray(r.data.resumes)) {
@@ -680,7 +705,13 @@
           }));
           if (receivedSignature !== signature) return; // 목록/본문이 아직 준비되지 않았으면 다음 state에서 재시도
           var dirty = false;
-          r.data.resumes.forEach(function (res) {
+          var collected = {};
+          for (var index = 0; index < r.data.resumes.length; index++) {
+            if (index % 5 === 0) {
+              await collectionTurn();
+              if (currentListSignature !== signature || location.pathname.indexOf('/resume_list') !== 0) return;
+            }
+            var res = r.data.resumes[index];
             (res.qnas || []).forEach(function (q) {
               if (q == null || q.id == null) return;
               var answer = String(q.answer == null ? '' : q.answer);
@@ -689,7 +720,7 @@
               var id = String(q.id);
               var prev = pending[id] || bank[id];
               if (prev && prev.answer === answer && prev.question === question) return;
-              pending[id] = {
+              collected[id] = {
                 resumeId: res.id,
                 resumeTitle: String(res.title == null ? '' : res.title),
                 number: q.number,
@@ -700,7 +731,8 @@
               };
               dirty = true;
             });
-          });
+          }
+          Object.keys(collected).forEach(function (id) { pending[id] = collected[id]; });
           importedListSignature = signature;
           if (dirty) {
             if (timer) clearTimeout(timer);

@@ -57,12 +57,19 @@
   }
 
   // 답변 뱅크 일괄 수집용: 현재 시즌 전체 자소서의 문항 전문 반환
-  function fullResumes() {
+  function fullResumes(payload) {
     const s = findScope();
     if (!s) return null;
     try {
+      const all = s.resumesInCurrentSeason || [];
+      const offset = payload && payload.offset;
+      const limit = payload && payload.limit;
+      const paged = offset !== undefined || limit !== undefined;
+      if (paged && (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 10)) return null;
       return {
-        resumes: (s.resumesInCurrentSeason || []).map(function (r) {
+        total: all.length,
+        offset: paged ? offset : 0,
+        resumes: (paged ? all.slice(offset, offset + limit) : all).map(function (r) {
           return {
             id: r.id,
             title: String(r.name == null ? '' : r.name),
@@ -224,7 +231,7 @@
           res.ok = true;
         }
       } else if (d.action === 'getFullResumes') {
-        res.data = fullResumes();
+        res.data = fullResumes(d.payload);
         res.ok = res.data !== null;
       } else if (d.action === 'sortAudit') {
         res.data = sortAudit();
