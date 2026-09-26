@@ -52,8 +52,17 @@
             }
           }
         } else if (approved && ctx && ctx.panel === approved.panel && ctx.chatId === approved.chatId &&
-            id(payload.chatId) === ctx.chatId && replyId === approved.replyId && node === approved.node &&
-            id(payload.targetId) === approved.targetId) result = { ok: true };
+            id(payload.chatId) === ctx.chatId && replyId === approved.replyId && node &&
+            id(payload.targetId) === approved.targetId) {
+          const live = node.querySelector('blockquote') && nativeMessage(node, replyId);
+          const target = live && live.target_message;
+          if (target && id(target.id) === approved.targetId &&
+              (live.chat_id == null || id(live.chat_id) === ctx.chatId) &&
+              (target.chat_id == null || id(target.chat_id) === ctx.chatId)) {
+            result = target.remove_status != null && Number(target.remove_status) !== 1
+              ? { ok: false, reason: 'deleted' } : { ok: true };
+          } else result = { ok: false, reason: 'changed' };
+        }
         else result = { ok: false, reason: 'changed' };
       }
     } catch (_) { result = { ok: false, reason: 'unavailable' }; }

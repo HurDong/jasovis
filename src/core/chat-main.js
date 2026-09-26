@@ -38,7 +38,8 @@
       params: { first_message_id: Math.max(0, replyId - 2), last_message_id: replyId + 1, order: 'asc' },
       timeout: 8000
     });
-    if (ticket !== generation || !same(ctx) || !node.isConnected) return { ok: false, reason: 'changed' };
+    const liveNode = message(ctx, replyId);
+    if (ticket !== generation || !same(ctx) || !liveNode || !liveNode.querySelector('.message_target-message')) return { ok: false, reason: 'changed' };
     const reply = Array.isArray(response.data) && response.data.find(function (m) { return Number(m.id) === replyId; });
     const target = reply && reply.target_message;
     const targetId = target && positiveId(target.id);

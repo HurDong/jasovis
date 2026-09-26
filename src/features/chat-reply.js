@@ -53,7 +53,16 @@
   }
   function message(panel, id) { return panel.querySelector('.message-content[message_id="' + id + '"],[id="chat-message-' + id + '"]'); }
   function valid(op) {
-    if (current !== op || !op.panel.isConnected || !op.reply.isConnected || !op.panel.contains(op.reply)) return false;
+    if (current !== op || !op.panel.isConnected) return false;
+    if (!op.reply.isConnected || !op.panel.contains(op.reply) || !op.quote.isConnected) {
+      // 과거 메시지를 추가할 때 같은 ID의 행도 새 DOM으로 교체될 수 있다.
+      const replacement = message(op.panel, op.replyId);
+      const quote = replacement && replacement.querySelector(quoteSelector);
+      if (!quote) return false;
+      op.quote.removeAttribute('data-jsl-reply-active');
+      op.reply = replacement; op.quote = quote;
+      quote.setAttribute('data-jsl-reply-active', 'true');
+    }
     if (op.engine === 'react' && !op.panel.classList.contains(op.roomClass)) return false;
     const r = op.panel.getBoundingClientRect();
     return r.width > 40 && r.left < innerWidth - 40 && r.right > 40 && getComputedStyle(op.panel).visibility !== 'hidden' &&
@@ -181,7 +190,12 @@
     const quote = event.target.closest && event.target.closest(quoteSelector);
     if (!quote) return;
     if (event.type === 'keydown' && !['Enter', ' '].includes(event.key)) return;
-    if (event.type === 'click' && document.getSelection().toString().trim()) return;
+    if (event.type === 'click') {
+      const selection = document.getSelection();
+      // 편집기 등 다른 영역에 남은 선택 때문에 원본 보기 클릭까지 무시하지 않는다.
+      if (selection && selection.toString().trim() && selection.rangeCount &&
+          selection.getRangeAt(0).intersectsNode(quote)) return;
+    }
     event.preventDefault(); event.stopImmediatePropagation(); // 원본의 말풍선 신고 토글과 겹치지 않게 한다.
     activate(quote);
   }
