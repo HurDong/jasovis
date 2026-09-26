@@ -1,5 +1,17 @@
 # ChatGPT 응답 일괄 입력 검증
 
+## 반복 분석 회귀 — 2026-09-26
+
+`node tests/gpt/performance.browser.cjs`는 Chrome/Playwright에서 가상 응답 30개와
+연동·미연동 runtime 응답을 사용한다. 무관한 화면 변경 5회에 분석/통신 0회,
+응답 한 개 수정에 분석 1회, 적용 전 낡은 지문 거절, 스트리밍 완료, DOM 복제,
+추가·삭제·SPA 대화 전환을 검사한다. 실제 계정·전송은 사용하지 않는다.
+
+`JSL_GPT_PERF_BASELINE=1`로 실행하면 기준 `809e719`에서 분석 300회로 실패한다.
+현재 코드에서는 두 연결 상태 모두 통과했다. 기존 `browser.cjs`, `citation.browser.cjs`의
+실제 MV3 가상 사이트 적용·되돌리기·응답 변경 거절과 protocol/background 단위 31개도 통과했다.
+macOS 또는 제보자의 실제 대화에서 체감 지연 개선 여부는 미검증이다.
+
 ## 단어 공백·뒤 재진술 안내 — 2026-09-15, 분석기 v2
 
 별도 `codex/gpt-spacing-guidance` 브랜치와 `C:\Users\ehd_a\Documents\Git\jasoseol-gpt-spacing-guidance` 워크트리에서 구현했다. 원본의 미커밋 변경은 가져오거나 덮어쓰지 않았다. 커밋·원본 반영·병합·푸시는 하지 않았다.

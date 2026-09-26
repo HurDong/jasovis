@@ -2,6 +2,10 @@
   'use strict';
   const P = globalThis.JSLGpt;
   const entries = new Map(), stale = new WeakMap();
+  const dirty = new Set(), byMessage = new WeakMap();
+  const assistantSelector = '[data-message-author-role="assistant"]';
+  const turnSelector = 'article, [data-testid^="conversation-turn-"]';
+  let fullScan = false;
   let current = P.conversation(location.href), busy = false, timer;
   function extract(body) {
     const blocks = [];
@@ -284,29 +288,35 @@
     panel.append(actions, entry.status, entry.differences, entry.choices);
     // article 전체가 아니라 markdown과 같은 부모/폭에 둔다.
     if (body === message) message.append(panel); else body.after(panel);
-    entries.set(entry.id, entry); linkText(entry, null);
+    entries.set(entry.id, entry); byMessage.set(message, entry); linkText(entry, null);
     send(entry, 'gpt:info').then(info => { if (valid(entry)) linkText(entry, info.link); }).catch(() => {});
   }
-  function scan() {
-    // React가 메시지를 복제해 복구하더라도 복제된 확장 DOM에는 이벤트/상태가 없다.
-    document.querySelectorAll('[data-jsl-gpt]').forEach(panel => {
-      if (!Array.from(entries.values()).some(entry => entry.panel === panel)) panel.remove();
-    });
+  function scan(all = true) {
     const next = P.conversation(location.href);
     if (next !== current) {
-      for (const entry of entries.values()) { entry.panel.remove(); stale.set(entry.message, bodyOf(entry.message).textContent); }
-      entries.clear(); current = next;
+      for (const entry of entries.values()) { entry.panel.remove(); byMessage.delete(entry.message); stale.set(entry.message, bodyOf(entry.message).textContent); }
+      entries.clear(); current = next; all = true;
     }
     for (const [id, entry] of entries) {
-      if (!valid(entry) || !extract(bodyOf(entry.message)).length) { entry.panel.remove(); entries.delete(id); }
+      if (!entry.message.isConnected || !entry.panel.isConnected || entry.conversation !== current) {
+        entry.panel.remove(); entries.delete(id); byMessage.delete(entry.message);
+      }
     }
+    const messages = all || fullScan ? [...document.querySelectorAll(assistantSelector)] : [...dirty];
+    dirty.clear(); fullScan = false;
     if (!current) return;
     const users = [...document.querySelectorAll('[data-message-author-role="user"]')];
-    document.querySelectorAll('[data-message-author-role="assistant"]').forEach(message => {
-      const turn = message.closest('article, [data-testid^="conversation-turn-"]'), body = bodyOf(message);
-      if (answersFeedback(message, users)) return;
-      if (!turn || !complete(message, turn) || stale.get(message) === body.textContent || !extract(body).length || Array.from(entries.values()).some(e => e.message === message)) return;
-      attach(message, turn, body);
+    messages.forEach(message => {
+      if (!message.isConnected) return;
+      const turn = message.closest(turnSelector), body = bodyOf(message);
+      const entry = byMessage.get(message);
+      // React 복제본의 확장 패널은 이벤트가 없으므로 해당 응답 범위에서만 제거한다.
+      message.querySelectorAll('[data-jsl-gpt]').forEach(panel => { if (panel !== entry?.panel) panel.remove(); });
+      const eligible = turn && complete(message, turn) && stale.get(message) !== body.textContent &&
+        !answersFeedback(message, users) && extract(body).length;
+      if (!eligible && entry) {
+        entry.panel.remove(); entries.delete(entry.id); byMessage.delete(message);
+      } else if (eligible && !entry) attach(message, turn, body);
     });
   }
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -316,8 +326,28 @@
     }
   });
   new MutationObserver(records => {
-    if (records.every(r => r.target.nodeType === 1 ? r.target.closest('[data-jsl-gpt]') : r.target.parentElement?.closest('[data-jsl-gpt]'))) return;
-    clearTimeout(timer); timer = setTimeout(scan, 180);
+    const element = node => node.nodeType === 1 ? node : node.parentElement;
+    const owned = node => !!element(node)?.closest('[data-jsl-gpt]');
+    const collect = node => {
+      const el = element(node);
+      if (!el || owned(el)) return;
+      if (el.matches(assistantSelector)) dirty.add(el);
+      el.querySelectorAll(assistantSelector).forEach(message => dirty.add(message));
+      if (el.matches('[data-message-author-role="user"]') || el.querySelector('[data-message-author-role="user"]')) fullScan = true;
+    };
+    for (const record of records) {
+      if (owned(record.target)) continue;
+      const changed = [...record.addedNodes, ...record.removedNodes];
+      if (record.type === 'childList' && changed.length && changed.every(owned)) continue;
+      const el = element(record.target);
+      const turn = el?.closest(turnSelector);
+      if (turn) collect(turn);
+      else if (record.type === 'characterData') collect(el?.closest(assistantSelector + ',[data-message-author-role="user"]') || record.target);
+      if (record.type === 'childList') changed.forEach(collect);
+      if (record.attributeName === 'data-is-streaming') collect(record.target);
+    }
+    if (!dirty.size && !fullScan && ![...entries.values()].some(entry => !entry.message.isConnected || !entry.panel.isConnected)) return;
+    clearTimeout(timer); timer = setTimeout(() => scan(false), 180);
   }).observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['data-is-streaming', 'class'] });
   // pushState 자체가 DOM을 즉시 바꾸지 않는 경우도 처리한다.
   setInterval(() => { if (P.conversation(location.href) !== current) scan(); }, 500);
